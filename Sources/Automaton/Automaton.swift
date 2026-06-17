@@ -119,7 +119,7 @@ extension Automaton: Graphvizable {
 }
 
 
-extension Automaton where Subtype == NondeterministicFiniteState {
+extension Automaton where Subtype == NFSA {
     
     public init(initial: Int, finals: Set<Int>, transitions: Set<Transition>) {
     }
@@ -254,7 +254,7 @@ extension Automaton where Subtype == NondeterministicFiniteState {
 }
 
 
-extension Automaton where Subtype == DeterministicFiniteState {
+extension Automaton where Subtype == DFSA {
 
     public init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, minimal: Bool) {
     }

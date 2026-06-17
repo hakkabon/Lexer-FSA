@@ -13,7 +13,7 @@ import GraphViz
 public enum ConstructionMethod {
     case thompson       // Thompson, recursive ϵ-automata asssembly.
     case berrySethi     // Berry-Sethi, first, last, follow sets and parse tree construction.
-//    case derivative     // Brzozowski, derivatives of expressions, almost minimal.
+    case derivative     // Antimirov partial derivatives and Brzozowski minimization of expressions.
 }
 
 /// Construction contract of Regular Languages.

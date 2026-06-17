@@ -241,8 +241,8 @@ struct AlphabetTests {
 struct NFAConstructionTests {
 
     /// Builds NFA for the language a(b|c)*
-    func makeSimpleNFA() -> NondeterministicFiniteState {
-        return NondeterministicFiniteState(
+    func makeSimpleNFA() -> NFSA {
+        return NFSA(
             initial: 0,
             finals: [1],
             transitions: [
@@ -287,7 +287,7 @@ struct NFAConstructionTests {
     }
 
     @Test func addEpsilonTransition() {
-        var nfa = NondeterministicFiniteState(initial: 0, finals: [2], transitions: [])
+        var nfa = NFSA(initial: 0, finals: [2], transitions: [])
         nfa.add(Transition(from: 0, AlphabetRange.epsilon, to: 1))
         nfa.add(Transition(from: 1, AlphabetRange.char("a"), to: 2))
         #expect(nfa.run(string: "a") == true)
@@ -303,8 +303,8 @@ struct NFAConstructionTests {
 struct NFASimulationTests {
 
     /// NFA for (a|b)*
-    func makeKleeneNFA() -> NondeterministicFiniteState {
-        NondeterministicFiniteState(
+    func makeKleeneNFA() -> NFSA {
+        NFSA(
             initial: 0,
             finals: [0],
             transitions: [
@@ -315,8 +315,8 @@ struct NFASimulationTests {
     }
 
     /// NFA for a·ε·b
-    func makeEpsilonNFA() -> NondeterministicFiniteState {
-        NondeterministicFiniteState(
+    func makeEpsilonNFA() -> NFSA {
+        NFSA(
             initial: 0,
             finals: [2],
             transitions: [
@@ -348,7 +348,7 @@ struct NFASimulationTests {
         let nfa = makeEpsilonNFA()
         // ε-path: 0 –a→ 1 –ε→ 2 (not final), need "ab" to reach state 3 — not final either
         // Let's build a proper accepting ε-NFA:
-        let nfa2 = NondeterministicFiniteState(
+        let nfa2 = NFSA(
             initial: 0,
             finals: [2],
             transitions: [
@@ -361,7 +361,7 @@ struct NFASimulationTests {
     }
 
     @Test func epsilonClosure() {
-        let nfa = NondeterministicFiniteState(
+        let nfa = NFSA(
             initial: 0,
             finals: [3],
             transitions: [
@@ -379,7 +379,7 @@ struct NFASimulationTests {
     }
 
     @Test func stepReturnsSuccessorSet() {
-        let nfa = NondeterministicFiniteState(
+        let nfa = NFSA(
             initial: 0,
             finals: [1, 2],
             transitions: [
@@ -392,7 +392,7 @@ struct NFASimulationTests {
     }
 
     @Test func stepOnRangeTransition() {
-        let nfa = NondeterministicFiniteState(
+        let nfa = NFSA(
             initial: 0,
             finals: [1],
             transitions: [
@@ -413,9 +413,9 @@ struct NFASimulationTests {
 @Suite("NFA Query API")
 struct NFAQueryTests {
 
-    func makeChainNFA() -> NondeterministicFiniteState {
+    func makeChainNFA() -> NFSA {
         // 0 -a-> 1 -b-> 2
-        NondeterministicFiniteState(
+        NFSA(
             initial: 0,
             finals: [2],
             transitions: [
@@ -461,8 +461,8 @@ struct NFAQueryTests {
 struct DFATests {
 
     /// DFA that accepts exactly "ab"
-    func makeABDFA() -> DeterministicFiniteState {
-        DeterministicFiniteState(
+    func makeABDFA() -> DFSA {
+        DFSA(
             initial: 0,
             finals: [2],
             transitions: [
@@ -503,7 +503,7 @@ struct DFATests {
 
     @Test func dfaWithRange() {
         // DFA accepting one digit
-        let dfa = DeterministicFiniteState(
+        let dfa = DFSA(
             initial: 0,
             finals: [1],
             transitions: [
@@ -525,8 +525,8 @@ struct DFATests {
 @Suite("DFA Query API")
 struct DFAQueryTests {
 
-    func makeDFA() -> DeterministicFiniteState {
-        DeterministicFiniteState(
+    func makeDFA() -> DFSA {
+        DFSA(
             initial: 0,
             finals: [2],
             transitions: [
@@ -573,7 +573,7 @@ struct DFAQueryTests {
 struct DeterminizationTests {
 
     @Test func determinizedNFAIsDeterministic() {
-        var nfa = NondeterministicFiniteState(
+        var nfa = NFSA(
             initial: 0,
             finals: [1],
             transitions: [
@@ -587,7 +587,7 @@ struct DeterminizationTests {
 
     @Test func determinizedNFAPreservesLanguage() {
         // NFA for (a|b)*  — initial state is both start and accept
-        var nfa = NondeterministicFiniteState(
+        var nfa = NFSA(
             initial: 0,
             finals: [0],
             transitions: [
@@ -604,7 +604,7 @@ struct DeterminizationTests {
 
     @Test func determinizedEpsilonNFAWorks() {
         // NFA: 0 -a-> 1 -ε-> 2  (finals: {2})
-        var nfa = NondeterministicFiniteState(
+        var nfa = NFSA(
             initial: 0,
             finals: [2],
             transitions: [
@@ -654,7 +654,7 @@ struct TokenClassTests {
 
     @Test func tokenMapAccessorOnNFA() {
         let tok = TokenClass(id: 7, name: "NUM", priority: 5)
-        var nfa = NondeterministicFiniteState(
+        var nfa = NFSA(
             initial: 0,
             finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("1"), to: 1)]
@@ -668,7 +668,7 @@ struct TokenClassTests {
     @Test func tokenMapPreservedAfterSetTokenMap() {
         let t1 = TokenClass(id: 1, name: "A", priority: 1)
         let t2 = TokenClass(id: 2, name: "B", priority: 2)
-        var nfa = NondeterministicFiniteState(
+        var nfa = NFSA(
             initial: 0,
             finals: [1, 2],
             transitions: [
@@ -683,7 +683,7 @@ struct TokenClassTests {
 
     @Test func setTokenMapOnDFA() {
         let tok = TokenClass(id: 3, name: "KW", priority: 1)
-        var dfa = DeterministicFiniteState(
+        var dfa = DFSA(
             initial: 0,
             finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("k"), to: 1)]
@@ -706,7 +706,7 @@ struct TokenTrackingTests {
         let identTok = TokenClass(id: 2, name: "IDENTIFIER", priority: 10)
 
         // DFA for "42" ending at state 2 (NUMBER) and "ab" ending at state 4 (IDENTIFIER)
-        var dfa = DeterministicFiniteState(
+        var dfa = DFSA(
             initial: 0,
             finals: [2, 4],
             transitions: [
@@ -733,7 +733,7 @@ struct TokenTrackingTests {
         let kwTok   = TokenClass(id: 1, name: "KEYWORD",    priority: 1)
         let identTok = TokenClass(id: 2, name: "IDENTIFIER", priority: 10)
 
-        var nfa = NondeterministicFiniteState(
+        var nfa = NFSA(
             initial: 0,
             finals: [1, 2],
             transitions: [
@@ -749,7 +749,7 @@ struct TokenTrackingTests {
 
     @Test func recognizeWithTokenReturnNilOnRejection() {
         let tok = TokenClass(id: 1, name: "A", priority: 0)
-        var dfa = DeterministicFiniteState(
+        var dfa = DFSA(
             initial: 0,
             finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)]
@@ -994,7 +994,7 @@ struct RegexDeterminizationTests {
 
     @Test func deterministicVersionPreservesLanguage() throws {
         let inputs = ["", "a", "b", "ab", "ba", "aabb", "c"]
-        var rNFA = try Regex("[ab]+")
+        let rNFA = try Regex("[ab]+")
         var rDFA = try Regex("[ab]+")
         rDFA.isDeterministic = true
         for input in inputs {
@@ -1029,7 +1029,7 @@ struct EpsilonRemovalTests {
 
     @Test func epsilonFreePreservesLanguage() throws {
         let inputs = ["ab", "a", "b", "", "abc"]
-        var rEps = try Regex("ab")
+        let rEps = try Regex("ab")
         var rFree = try Regex("ab")
         rFree.epsilonFree = true
         for input in inputs {
@@ -1075,7 +1075,7 @@ struct AutomatonWrapperTests {
     }
 
     @Test func wrapNondeterministicFiniteState() throws {
-        let nfa = NondeterministicFiniteState(
+        let nfa = NFSA(
             initial: 0,
             finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("z"), to: 1)]
@@ -1086,7 +1086,7 @@ struct AutomatonWrapperTests {
     }
 
     @Test func wrapDeterministicFiniteState() throws {
-        let dfa = DeterministicFiniteState(
+        let dfa = DFSA(
             initial: 0,
             finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("q"), to: 1)]
@@ -1107,7 +1107,7 @@ struct DAWGTests {
 
     @Test func exactKeywordMatch() {
         let keywords = ["if", "else", "while", "for", "return"]
-        let dfa = Automaton<DeterministicFiniteState>.stringUnion(words: keywords)
+        let dfa = Automaton<DFSA>.stringUnion(words: keywords)
         for kw in keywords {
             #expect(dfa.run(string: kw) == true, "should accept keyword '\(kw)'")
         }
@@ -1115,7 +1115,7 @@ struct DAWGTests {
 
     @Test func nonKeywordRejected() {
         let keywords = ["if", "else", "while"]
-        let dfa = Automaton<DeterministicFiniteState>.stringUnion(words: keywords)
+        let dfa = Automaton<DFSA>.stringUnion(words: keywords)
         #expect(dfa.run(string: "iff") == false)
         #expect(dfa.run(string: "el") == false)
         #expect(dfa.run(string: "whiles") == false)
@@ -1123,14 +1123,14 @@ struct DAWGTests {
     }
 
     @Test func singleWordDictionary() {
-        let dfa = Automaton<DeterministicFiniteState>.stringUnion(words: ["hello"])
+        let dfa = Automaton<DFSA>.stringUnion(words: ["hello"])
         #expect(dfa.run(string: "hello") == true)
         #expect(dfa.run(string: "hell") == false)
         #expect(dfa.run(string: "helloo") == false)
     }
 
     @Test func sharedPrefixWords() {
-        let dfa = Automaton<DeterministicFiniteState>.stringUnion(words: ["fore", "for", "ford"])
+        let dfa = Automaton<DFSA>.stringUnion(words: ["fore", "for", "ford"])
         #expect(dfa.run(string: "for") == true)
         #expect(dfa.run(string: "fore") == true)
         #expect(dfa.run(string: "ford") == true)
@@ -1139,7 +1139,7 @@ struct DAWGTests {
     }
 
     @Test func sharedSuffixWords() {
-        let dfa = Automaton<DeterministicFiniteState>.stringUnion(words: ["cat", "bat", "rat"])
+        let dfa = Automaton<DFSA>.stringUnion(words: ["cat", "bat", "rat"])
         #expect(dfa.run(string: "cat") == true)
         #expect(dfa.run(string: "bat") == true)
         #expect(dfa.run(string: "rat") == true)
@@ -1147,7 +1147,7 @@ struct DAWGTests {
     }
 
     @Test func resultIsDeterministic() {
-        let dfa = Automaton<DeterministicFiniteState>.stringUnion(words: ["abc", "abd"])
+        let dfa = Automaton<DFSA>.stringUnion(words: ["abc", "abd"])
         #expect(dfa.isDeterministic == true)
     }
 }
@@ -1161,8 +1161,8 @@ struct DAWGTests {
 struct InvariantTests {
 
     /// Build a DFA that has a zombie accept state (state 99 has no transitions).
-    func makeZombieDFA() -> DeterministicFiniteState {
-        DeterministicFiniteState(
+    func makeZombieDFA() -> DFSA {
+        DFSA(
             initial: 0,
             finals: [1, 99],
             transitions: [
@@ -1186,8 +1186,8 @@ struct InvariantTests {
     }
 
     /// DFA where state 5 is unreachable from initial (0).
-    func makeUnreachableDFA() -> DeterministicFiniteState {
-        DeterministicFiniteState(
+    func makeUnreachableDFA() -> DFSA {
+        DFSA(
             initial: 0,
             finals: [1, 5],
             transitions: [
@@ -1215,7 +1215,7 @@ struct InvariantTests {
 struct GraphvizTests {
 
     @Test func nfaGraphvizProducesDirectedGraph() {
-        let nfa = NondeterministicFiniteState(
+        let nfa = NFSA(
             initial: 0,
             finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)]
@@ -1225,7 +1225,7 @@ struct GraphvizTests {
     }
 
     @Test func dfaGraphvizProducesDirectedGraph() {
-        let dfa = DeterministicFiniteState(
+        let dfa = DFSA(
             initial: 0,
             finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("x"), to: 1)]
@@ -1281,7 +1281,7 @@ struct CodableAlphabetRangeTests {
 struct StateFlagTests {
 
     @Test func nfaIsNotDeterministic() {
-        let nfa = NondeterministicFiniteState(
+        let nfa = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)]
         )
@@ -1290,7 +1290,7 @@ struct StateFlagTests {
     }
 
     @Test func dfaIsDeterministic() {
-        let dfa = DeterministicFiniteState(
+        let dfa = DFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)],
             minimal: false
@@ -1300,7 +1300,7 @@ struct StateFlagTests {
     }
 
     @Test func minimalFlagSetOnConstruction() {
-        let dfa = DeterministicFiniteState(
+        let dfa = DFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)],
             minimal: true
@@ -1309,7 +1309,7 @@ struct StateFlagTests {
     }
 
     @Test func stateCountReflectsTransitions() {
-        let nfa = NondeterministicFiniteState(
+        let nfa = NFSA(
             initial: 0, finals: [2],
             transitions: [
                 Transition(from: 0, AlphabetRange.char("a"), to: 1),
@@ -1321,7 +1321,7 @@ struct StateFlagTests {
     }
 
     @Test func alphabetReflectsAllRanges() {
-        let dfa = DeterministicFiniteState(
+        let dfa = DFSA(
             initial: 0, finals: [1],
             transitions: [
                 Transition(from: 0, AlphabetRange.range("a","c"), to: 1),

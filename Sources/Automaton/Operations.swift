@@ -8,7 +8,7 @@
 
 import Foundation
 
-extension Automaton: AutomataOperation where Type == DeterministicFiniteState.Subtype {
+extension Automaton: AutomataOperation where Type == DFSA.Subtype {
 
     /// Returns an automaton that accepts the union of the languages of the given automata.
     /// - Parameters:
@@ -66,6 +66,6 @@ extension Automaton: AutomataOperation where Type == DeterministicFiniteState.Su
         var accept = Set<Int>()
 
         traverseTrie(node: builder.root)
-        return Automaton(DeterministicFiniteState(initial: initial, finals: accept, transitions: transitions))
+        return Automaton(DFSA(initial: initial, finals: accept, transitions: transitions))
     }
 }

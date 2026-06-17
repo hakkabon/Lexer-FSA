@@ -1,5 +1,5 @@
 //
-//  NondeterministicFiniteState.swift
+//  DFSA.swift
 //  Automaton
 //
 //  Created by Ulf Akerstedt-Inoue on 2021/05/15.
@@ -9,22 +9,22 @@
 import Foundation
 import GraphViz
 
-public struct NondeterministicFiniteState {
+public struct DFSA {
 
     /// Actual internal subtype.
-    public typealias Subtype = NondeterministicFiniteState
+    public typealias Subtype = DFSA
 
     /// Internal value state of automaton.
-    public var state: State<Subtype> = .nfa(initial: 0, finals: Set<Int>(), transitions: Set<Transition>(), tokenMap: [:])
+    public var state: State<Subtype> = .dfa(initial: 0, finals: Set<Int>(), transitions: Set<Transition>(), minimal: false, tokenMap: [:])
 
-    /// Creates a nondeterministic finite state automaton.
-    public init(initial: Int, finals: Set<Int>, transitions: Set<Transition>) {
-        self.state = .nfa(initial: initial, finals: finals, transitions: transitions, tokenMap: [:])
+    /// Creates a deterministic finite state automaton.
+    public init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, minimal: Bool = false) {
+        self.state = .dfa(initial: initial, finals: finals, transitions: transitions, minimal: minimal, tokenMap: [:])
     }
 }
 
-extension NondeterministicFiniteState: FSA {
-
+extension DFSA: FSA {
+    
     /// Returns true if state of automaton is `empty`.
     public var isEmpty: Bool {
         self.state.isEmpty
@@ -80,7 +80,7 @@ extension NondeterministicFiniteState: FSA {
     }
 }
 
-extension NondeterministicFiniteState: Nondeterministic {
+extension DFSA: Deterministic {    
 
     /// Simulates the automaton to determine if it accepts the given input string.
     ///
@@ -94,32 +94,19 @@ extension NondeterministicFiniteState: Nondeterministic {
         return self.state.run(string: s)
     }
 
-    /// Computes the ε-closure (epsilon closure) of a given state.
-    ///
-    /// The ε-closure is the set of all states reachable from `state` by following zero or more
-    /// ε-transitions (transitions that consume no input).
-    ///
-    /// - Parameters:
-    ///   - state: The starting state identifier.
-    ///   - transitions: The set of all transitions available in the automaton context.
-    /// - Returns: A `Set` of states reachable via ε-moves, including the start `state` itself.
-    public func epsClosure(state: Int, over transitions: Set<Transition>) -> Set<Int> {
-        return self.state.epsClosure(state: state, over: transitions)
-    }
-
     /// Computes the single-step transition for a state and a symbol.
     ///
-    /// Represents the transition function `δ(q, a)`. In an NFA, this returns a set of potential
+    /// Represents the transition function `δ(q, a)`. In a DFA, this returns one potential
     /// next states.
     ///
     /// - Parameters:
     ///   - state: The current state identifier.
     ///   - symbol: The input character to consume.
     /// - Returns: A `Set` of valid destination states. Returns an empty set if no matching transition exists.
-    public func step(state: Int, symbol: Character) -> Set<Int> {
+    public func step(state: Int, symbol: Character) -> Int? {
         return self.state.step(state: state, symbol: symbol)
     }
-
+    
     /// Returns the set of states directly reachable from a given state via a specific symbol.
     ///
     /// This function computes the direct image of the transition function:
@@ -128,8 +115,8 @@ extension NondeterministicFiniteState: Nondeterministic {
     /// - Parameters:
     ///   - source: The identifier of the source state.
     ///   - symbol: The input character triggering the transition.
-    /// - Returns: A `Set` of state identifiers that are successors of `source` on input `symbol`.
-    public func successor(source: Int, symbol: Character) -> Set<Int> {
+    /// - Returns: An optional state identifier that is successor of `source` on input `symbol`.
+    public func successor(source: Int, symbol: Character) -> Int? {
         return self.state.successor(source: source, symbol: symbol)
     }
     
@@ -170,53 +157,34 @@ extension NondeterministicFiniteState: Nondeterministic {
     public func reachableStates(from source: Int) -> Set<Int> {
         return self.state.reachableStates(from: source)
     }
-    
-    /// Adds a new transition to the automaton.
-    ///
-    /// Inserts a directed edge from `source` to `target` labeled with `symbol`.
-    ///
-    /// - Parameters:
-    ///   - source: The identifier of the source state.
-    ///   - symbol: The input character for the transition.
-    ///   - target: The identifier of the destination state.
-    public mutating func addTransition(source: Int, symbol: Character, target: Int) {
-        return self.state.addTransition(source: source, symbol: symbol, target: target)
-    }
-    
-    /// Adds a predefined transition object to the automaton.
-    ///
-    /// - Parameter transition: The `Transition` structure containing the source, symbol, and target.
-    public mutating func add(_ transition: Transition) {
-        return self.state.add(transition)
-    }
 
-    /// Converts a Nondeterministic Finite Automaton (NFA) into a Deterministic Finite Automaton (DFA).
-    ///
-    /// This method implements the **Powerset Construction** (also known as Subset Construction) algorithm.
-    /// It creates a new DFA where each state represents a set of states from the original NFA.
-    ///
-    /// - Parameter nfa: The input `NfaTuple` representing the nondeterministic automaton.
-    /// - Returns: A `DfaTuple` representing the equivalent deterministic automaton.
-    /// - Complexity: Exponential in the worst case relative to the number of NFA states, though often much smaller in practice.
-    public mutating func determinize() {
-        self.state.determinize()
-    }
+//    public mutating func minimize() {
+//        self.state.minimize()
+//    }
 
     /// Generates a new automaton instance based on the provided configuration options.
+    /// Generate a random DFA using the bridge-based strategy
+    /// This ensures:
+    /// - All states are reachable from initial states
+    /// - All states can reach final states
+    /// - Exactly one transition per (state, symbol) pair
     ///
     /// - Parameter options: A `GenerateOptions` object specifying the configuration and constraints for the automaton generation.
     /// - Returns: A new instance of type `T` (the Automaton).
-    public func generate(with options: GenerateOptions) -> Subtype {
+    public func generate(with options: GenerateOptions) -> Self {
         return self.state.generate(with: options)
+    }
+
+    public func isEquivalent(a: DFSA, p: Int, q: Int, c: [Int]) -> Bool {
+        return false
     }
 }
 
 // MARK: - CustomStringConvertible Conformance
 
-extension NondeterministicFiniteState: CustomStringConvertible {
+extension DFSA: CustomStringConvertible {
 
-    /// Output internal representation in String format.
-    /// States are not re-numbered.
+    /// Output internal representation in String format. States are not re-numbered.
     public var description: String {
         return self.state.description
     }
@@ -224,7 +192,7 @@ extension NondeterministicFiniteState: CustomStringConvertible {
 
 // MARK: - Graphvizable Conformance
 
-extension NondeterministicFiniteState: Graphvizable {
+extension DFSA: Graphvizable {
 
     /// Output internal representation in graphviz format. States are not re-numbered.
     /// Note that the states are always re-numbered.

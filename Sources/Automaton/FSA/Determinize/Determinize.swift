@@ -10,7 +10,7 @@ import Foundation
 
 // MARK: - Determinization with Token Tracking
 
-extension State where T == NondeterministicFiniteState {
+extension State where T == NFSA {
 
     /// Converts this NFA into a DFA using the powerset (subset) construction,
     /// preserving the token-class map so that each DFA accepting state is labelled

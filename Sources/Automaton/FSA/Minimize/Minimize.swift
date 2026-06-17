@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Token-Class-Aware DFA Minimization (Hopcroft's algorithm)
 
-extension DeterministicFiniteState {
+extension DFSA {
 
     /// Minimizes this DFA using Hopcroft's algorithm, extended to treat states
     /// that carry *different* token classes as distinguishable even when their

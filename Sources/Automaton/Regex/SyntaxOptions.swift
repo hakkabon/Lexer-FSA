@@ -1,5 +1,5 @@
 //
-//  RegexSyntaxOptions.swift
+//  SyntaxOptions.swift
 //  Automaton
 //
 //  Created by Ulf Akerstedt-Inoue on 2020/06/05.

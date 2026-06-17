@@ -26,19 +26,19 @@ public enum State<T> {
     
     // MARK: Constructors
     
-    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>) where T == NondeterministicFiniteState {
+    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>) where T == NFSA {
         self = .nfa(initial: initial, finals: finals, transitions: transitions, tokenMap: [:])
     }
     
-    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, tokenMap: [Int: TokenClass]) where T == NondeterministicFiniteState {
+    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, tokenMap: [Int: TokenClass]) where T == NFSA {
         self = .nfa(initial: initial, finals: finals, transitions: transitions, tokenMap: tokenMap)
     }
     
-    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, minimal: Bool) where T == DeterministicFiniteState {
+    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, minimal: Bool) where T == DFSA {
         self = .dfa(initial: initial, finals: finals, transitions: transitions, minimal: minimal, tokenMap: [:])
     }
     
-    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, minimal: Bool, tokenMap: [Int: TokenClass]) where T == DeterministicFiniteState {
+    init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, minimal: Bool, tokenMap: [Int: TokenClass]) where T == DFSA {
         self = .dfa(initial: initial, finals: finals, transitions: transitions, minimal: minimal, tokenMap: tokenMap)
     }
     
@@ -303,7 +303,7 @@ extension State: CustomStringConvertible {
     }
 }
 
-extension State where T == NondeterministicFiniteState {
+extension State where T == NFSA {
     
     /// Simulates the automaton to determine if it accepts the given input string.
     ///
@@ -524,7 +524,7 @@ extension State where T == NondeterministicFiniteState {
     }
 }
 
-extension State where T == DeterministicFiniteState {
+extension State where T == DFSA {
 
     /// Simulates the automaton to determine if it accepts the given input string.
     ///
@@ -685,7 +685,7 @@ extension State where T == DeterministicFiniteState {
         if case let .dfa(_, _, t, _, _) = self {
             transitions = t
         }
-        var wrapper = DeterministicFiniteState(
+        var wrapper = DFSA(
             initial: self.initial,
             finals:  self.finals,
             transitions: transitions

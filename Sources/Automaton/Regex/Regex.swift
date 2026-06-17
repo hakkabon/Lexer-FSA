@@ -155,6 +155,9 @@ public struct Regex: RegularLanguage {
         case .berrySethi:
             builder = BerrySethi(expression: expression, flags: flags)
             self.state = try builder.construct()
+        case .derivative:
+            builder = Antimirov(expression: expression, flags: flags)
+            self.state = try builder.construct()
         }
     }
 
@@ -211,15 +214,15 @@ extension Regex {
 extension Regex {
     
     /// Convert a Regular Expression to an Automaton of nondeterministic type.
-    public static func nondeterministicFiniteState(_ r: Regex) -> NondeterministicFiniteState {
+    public static func nondeterministicFiniteState(_ r: Regex) -> NFSA {
         guard case let .nfa(initial, finals, transitions, _) = r.state else { fatalError() }
-        return NondeterministicFiniteState(initial: initial, finals: finals, transitions: transitions)
+        return NFSA(initial: initial, finals: finals, transitions: transitions)
     }
 
     /// Convert a Regular Expression to an Automaton of deterministic type.
-    public static func deterministicFiniteState(_ r: Regex) -> DeterministicFiniteState {
+    public static func deterministicFiniteState(_ r: Regex) -> DFSA {
         guard case let .dfa(initial, finals, transitions, minimal, _) = r.state else { fatalError() }
-        return DeterministicFiniteState(initial: initial, finals: finals, transitions: transitions, minimal: minimal)
+        return DFSA(initial: initial, finals: finals, transitions: transitions, minimal: minimal)
     }
     
     /// Print internal representation.

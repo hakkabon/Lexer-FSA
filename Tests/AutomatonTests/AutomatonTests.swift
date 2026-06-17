@@ -18,9 +18,10 @@ func testFloatLexemes() async throws {
     #expect(automaton.recognize(string: "-0.123e-6"), "valid lexeme '-0.123e-6'")
 }
 
+// Important use-case: This how the parser uses the Automaton.
+
 #if false
 
-// Important use-case: This how the parser uses the Automaton.
 @Test
 func testRegexUnion() async throws {
     // Define token classes for the automaton.

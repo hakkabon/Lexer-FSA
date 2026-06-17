@@ -4,14 +4,14 @@ import XCTest
 class AutomatonCreationTests: XCTestCase {
 
     func testEmptyNondeterministicFiniteState() throws {
-        let nfa = NondeterministicFiniteState(initial: 0, finals: Set<Int>(), transitions: Set<Transition>())
+        let nfa = NFSA(initial: 0, finals: Set<Int>(), transitions: Set<Transition>())
         let a = Automaton(nfa)
         XCTAssertNotNil(nfa)
         XCTAssertNotNil(a)
     }
     
     func testEmptyDeterministicFiniteState() throws {
-        let dfa = DeterministicFiniteState(initial: 0, finals: Set<Int>(), transitions: Set<Transition>())
+        let dfa = DFSA(initial: 0, finals: Set<Int>(), transitions: Set<Transition>())
         let a = Automaton(dfa)
         XCTAssertNotNil(dfa)
         XCTAssertNotNil(a)
@@ -23,7 +23,7 @@ class AutomatonCreationTests: XCTestCase {
         transitions.insert(Transition(from: 0, AlphabetRange.char("a"), to: 1))
         transitions.insert(Transition(from: 0, AlphabetRange.char("b"), to: 2))
         transitions.insert(Transition(from: 1, AlphabetRange.char("b"), to: 3))
-        let nfa = NondeterministicFiniteState(initial: 0, finals: finals, transitions: transitions)
+        let nfa = NFSA(initial: 0, finals: finals, transitions: transitions)
         let a = Automaton(nfa)
         XCTAssertNotNil(nfa)
         XCTAssertNotNil(a)
@@ -36,7 +36,7 @@ class AutomatonCreationTests: XCTestCase {
         transitions.insert(Transition(from: 0, AlphabetRange.char("b"), to: 2))
         transitions.insert(Transition(from: 1, AlphabetRange.char("b"), to: 3))
         transitions.insert(Transition(from: 1, AlphabetRange.char("a"), to: 4))
-        let dfa = DeterministicFiniteState(initial: 0, finals: finals, transitions: transitions)
+        let dfa = DFSA(initial: 0, finals: finals, transitions: transitions)
         let a = Automaton(dfa)
         XCTAssertNotNil(dfa)
         XCTAssertNotNil(a)

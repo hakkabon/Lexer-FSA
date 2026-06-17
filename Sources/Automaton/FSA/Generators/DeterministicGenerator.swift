@@ -8,7 +8,7 @@
 
 import Foundation
 
-extension State where T == DeterministicFiniteState {
+extension State where T == DFSA {
 
     /// Generate a random DFA using the bridge-based strategy
     /// This ensures:
@@ -18,7 +18,7 @@ extension State where T == DeterministicFiniteState {
     ///
     /// - Parameter options: A `GenerateOptions` object specifying the configuration and constraints for the automaton generation.
     /// - Returns: A new instance of type `T` (the Automaton).
-    public func generate(with options: GenerateOptions) -> DeterministicFiniteState {
+    public func generate(with options: GenerateOptions) -> DFSA {
         guard case let .dfaStrategy(construction) = options.strategy else {
             fatalError("Internal inconsistency: Deterministic Generative method contains NFA argument.")
         }
@@ -36,7 +36,7 @@ extension State where T == DeterministicFiniteState {
     /// Generate a simpler DFA using direct construction
     /// This is a more straightforward approach but may not guarantee
     /// the same connectivity properties as the bridge generator
-    public func generateSimple(with options: GenerateOptions) -> DeterministicFiniteState {
+    public func generateSimple(with options: GenerateOptions) -> DFSA {
         let symbolgen = SymbolGenerator()
         let symbols = Array(symbolgen.substring(range: 0..<options.symbols))
         
@@ -121,7 +121,7 @@ extension State where T == DeterministicFiniteState {
             }
         }
         
-        return DeterministicFiniteState(initial: initial, finals: finals, transitions: transitions, minimal: false)
+        return DFSA(initial: initial, finals: finals, transitions: transitions, minimal: false)
     }
     
     // MARK: - DFA Bridge Generator
@@ -163,7 +163,7 @@ extension State where T == DeterministicFiniteState {
         
         // MARK: - Main Generation
         
-        mutating func generate() -> DeterministicFiniteState {
+        mutating func generate() -> DFSA {
             // Initialize basic structure
             initializeStates()
             
@@ -176,7 +176,7 @@ extension State where T == DeterministicFiniteState {
             // Fill in remaining transitions to ensure completeness
             completeTransitions()
             
-            return DeterministicFiniteState(
+            return DFSA(
                 initial: initial,
                 finals: finals,
                 transitions: transitions,

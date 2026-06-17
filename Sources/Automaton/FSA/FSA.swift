@@ -1,5 +1,5 @@
 //
-//  FiniteState.swift
+//  FSA.swift
 //  Automaton
 //
 //  Created by Ulf Akerstedt-Inoue on 2019/01/16.
