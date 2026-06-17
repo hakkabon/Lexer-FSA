@@ -22,7 +22,11 @@ extension Regex {
         public var isLeaf: Bool { return children.count == 0 }
          
         /// Number generator.
-        let sequence = Counter.shared
+        ///
+        /// Local to this `ParseNode` instance. Replaces the old
+        /// `Counter.shared` singleton so build results are reproducible
+        /// (and so different ParseNode trees don't interleave their IDs).
+        let sequence = Counter()
 
         public init() {}
 

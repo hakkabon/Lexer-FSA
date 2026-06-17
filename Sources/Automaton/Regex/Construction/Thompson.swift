@@ -33,8 +33,9 @@ extension Regex {
         /// The parsed regular expression.
         var expression: Expression = .empty
         
-        /// Number generator.
-        let state = Counter.shared
+        /// Local monotonic state-id counter. Replaces the old
+        /// `Counter.shared` singleton so builds are reproducible.
+        let state = Counter()
         
         /// Thompson construction method.
         func compile(_ expression: Expression) throws -> ThompsonAutomata {
