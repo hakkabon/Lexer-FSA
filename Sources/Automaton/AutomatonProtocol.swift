@@ -8,16 +8,8 @@
 
 import Foundation
 
-/// This is Work In Progress
-protocol AutomataOperation {
-
-    /// Actual type value of the Finite State Automaton.
-    associatedtype Subtype
-
-    // static functions 
-    static func union(a: Automaton<Subtype>, b: Automaton<Subtype>) -> Automaton<Subtype>
-    static func union(list: [Automaton<Subtype>]) -> Automaton<Subtype>
-
-    // Directed Acyclic Word Graph - DAWG interface
-    static func stringUnion(words: [String]) -> Automaton<Subtype>
-}
+// The previous `AutomataOperation` protocol has been removed. Its only
+// conformer was `Automaton<DFSA>`, and the three operations it declared
+// (`union(a:b:)`, `union(list:)`, `stringUnion(words:)`) are now plain
+// static methods on `Automaton<DFSA>` and `Automaton<NFSA>` defined in
+// `Operations.swift`. See §4 of the code-review notes.

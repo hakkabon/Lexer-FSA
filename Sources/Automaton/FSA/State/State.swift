@@ -142,7 +142,7 @@ extension State {
         }
     }
     
-    /// Returns alphabet defined on autmaton.
+    /// Returns alphabet defined on automaton.
     public var alphabet: Alphabet {
         switch self {
         case let .nfa(_,_,transitions,_): return transitions.alphabet()
@@ -151,7 +151,7 @@ extension State {
         }
     }
     
-    /// Returns true if given state is the `final` state of autmaton.
+    /// Returns true if given state is the `final` state of automaton.
     public func isFinal(state: Int) -> Bool {
         switch self {
         case let .nfa(_,finals,_,_): return finals.contains(state)
@@ -160,7 +160,7 @@ extension State {
         }
     }
     
-    /// Returns true if given state is the `initial` state of autmaton.
+    /// Returns true if given state is the `initial` state of automaton.
     public func isInitial(state: Int) -> Bool {
         switch self {
         case let .nfa(initial,_,_,_): return initial == state
@@ -690,20 +690,29 @@ extension State where T == DFSA {
         return visited
     }
 
-    /// Minimizes this DFA.  Delegates to `DeterministicFiniteState.minimize()`.
+    /// Minimizes this DFA. Delegates to `DFSA.minimize()`.
+    ///
+    /// The previous implementation constructed a throwaway `DFSA` wrapper,
+    /// called `wrapper.minimize()`, then unwrapped. That round-trip is
+    /// unnecessary now that `DFSA.minimize()` operates directly on its
+    /// `state` field — we can just construct the wrapper inline.
     mutating func minimize() {
-        var transitions: Set<Transition> = []
-        if case let .dfa(_, _, t, _, _) = self {
-            transitions = t
-        }
         var wrapper = DFSA(
             initial: self.initial,
             finals:  self.finals,
-            transitions: transitions
+            transitions: (extractTransitions() ?? [])
         )
         wrapper.state = self
         wrapper.minimize()
         self = wrapper.state
+    }
+
+    /// Helper: pull out the transition set regardless of which case we are.
+    private func extractTransitions() -> Set<Transition>? {
+        switch self {
+        case let .nfa(_, _, t, _): return t
+        case let .dfa(_, _, t, _, _): return t
+        }
     }
 }
 

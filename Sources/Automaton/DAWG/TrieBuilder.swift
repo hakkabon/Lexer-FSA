@@ -28,13 +28,13 @@ public class TrieBuilder {
     }
 
     public func minimize() {
-        root = minimmize(root: root)
+        root = minimize(root: root)
     }
 
     // Merge isomorphic subtrees (subgraphs) bottom up.
-    private func minimmize(root node: TrieNode) -> TrieNode {
+    private func minimize(root node: TrieNode) -> TrieNode {
         for edge in node.edges /*.sorted(by: { $0.key < $1.key }) */ {
-            node.setTarget(for: edge.key, target: minimmize(root: edge.value))
+            node.setTarget(for: edge.key, target: minimize(root: edge.value))
         }
         return setOrRegister(node: node)
     }

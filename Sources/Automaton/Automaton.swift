@@ -79,17 +79,17 @@ extension Automaton : FSA {
         self.state.finalCount
     }
     
-    /// Returns alphabet defined on autmaton.
+    /// Returns alphabet defined on automaton.
     public var alphabet: Alphabet {
         self.state.alphabet
     }
     
-    /// Returns true if given state is the `final` state of autmaton.
+    /// Returns true if given state is the `final` state of automaton.
     public func isFinal(state: Int) -> Bool {
         self.state.isFinal(state: state)
     }
     
-    /// Returns true if given state is the `initial` state of autmaton.
+    /// Returns true if given state is the `initial` state of automaton.
     public func isInitial(state: Int) -> Bool {
         self.state.isInitial(state: state)
     }

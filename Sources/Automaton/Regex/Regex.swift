@@ -73,16 +73,9 @@ public struct Regex: RegularLanguage {
     /// Meta symbols used when parsing
     var metasymbols: Set<String> = Set()
 
-    struct InternalState {
-        /// containing epsilon transitions or not.
-        var isEpsilonFree: Bool = false
-        /// Indicates if *Automaton* is deterministic or not.
-        var isDeterministic: Bool = false
-    }
-
     /// Compiled and constructed finite state machine.
     public var state: State<Regex>
-    
+
     // Regex builder using one of the above methods for construction.
     public var builder: RegularLanguageBuilder
 
@@ -100,37 +93,43 @@ public struct Regex: RegularLanguage {
     }
 
     /// Deterministic state of Automaton.
+    ///
+    /// Derived from `state.isDeterministic` (which pattern-matches `.dfa`)
+    /// rather than maintained in a separate `InternalState` flag. The
+    /// setter runs the unified, token-aware powerset construction on
+    /// `State<T>` (Determinize.swift).
     public var isDeterministic: Bool {
         get {
-            return internalState.isDeterministic
+            return state.isDeterministic
         }
         set(value) {
-            if value, !internalState.isDeterministic {
-                // Use the unified, token-aware powerset construction on
-                // `State<T>` (Determinize.swift). Previously this setter
-                // called `self.powerset(...)` in RegexPowerset.swift, which
-                // did *not* propagate the token map — silently dropping
-                // every TokenClass attached to the NFA's accepting states.
-                self.state.determinize()
-                internalState.isDeterministic = true
+            if value, !state.isDeterministic {
+                state.determinize()
             }
         }
     }
 
-    /// Epsilon abscent state of Automaton.
+    /// Whether the automaton currently has any ε-transitions.
+    ///
+    /// Derived from `state`: a `.dfa` is always ε-free; a `.nfa` is
+    /// ε-free iff no transition in its transition set is `.epsilon`.
+    /// Setter calls `removeEps` to actually strip ε-transitions.
     public var epsilonFree: Bool {
         get {
-            switch self.state {
-            case .nfa(_,_,_,_): return internalState.isEpsilonFree
-            case .dfa(_,_,_,_,_): return true
+            switch state {
+            case .dfa: return true
+            case let .nfa(_, _, transitions, _):
+                return !transitions.contains { $0.alphabetRange == .epsilon }
             }
         }
         set(value) {
-            if value, !internalState.isEpsilonFree {
-                guard case let .nfa(initial, finals, transitions, _) = self.state else { return }
-                let nfa = removeEps(initial: initial, finals: finals, transitions: transitions)
-                self.state = .nfa(initial: nfa.initial, finals: nfa.finals, transitions: nfa.transitions, tokenMap: [:])
-                internalState.isEpsilonFree = true
+            if value {
+                switch state {
+                case .dfa: return
+                case let .nfa(initial, finals, transitions, _):
+                    let nfa = removeEps(initial: initial, finals: finals, transitions: transitions)
+                    state = .nfa(initial: nfa.initial, finals: nfa.finals, transitions: nfa.transitions, tokenMap: [:])
+                }
             }
         }
     }
@@ -139,9 +138,6 @@ public struct Regex: RegularLanguage {
     public var isMinimal: Bool {
         self.state.isMinimal
     }
-
-    /// Current internal state of automaton.
-    internal var internalState = InternalState(isEpsilonFree: false, isDeterministic: false)
     
     /// Constructs a Regular Expression from a string.
     /// - Parameters:

@@ -136,7 +136,7 @@ extension Transition {
 
 extension Set where Element == Transition {
         
-    /// Returns alphabet defined on autmaton.
+    /// Returns alphabet defined on automaton.
     /// See also alphabet data structure for more information.
     /// Returns: Defined alphabet.
     public func alphabet() -> Alphabet {

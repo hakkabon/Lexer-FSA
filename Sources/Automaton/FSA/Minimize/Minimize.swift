@@ -30,11 +30,15 @@ extension DFSA {
         // ── Initial partition ────────────────────────────────────────────────
         // Non-accepting states share one block; accepting states are grouped by
         // token class so that states with different classes are never merged.
+        //
+        // We use a sorted array of partitions rather than Set<Set<Int>> so
+        // that the new-state-id assignment is deterministic across runs
+        // (Set<Set<Int>> iteration order is unstable).
 
-        var partitions: Set<Set<Int>> = []
+        var partitions: [Set<Int>] = []
 
         let nonAccepting = allStates.subtracting(finals)
-        if !nonAccepting.isEmpty { partitions.insert(nonAccepting) }
+        if !nonAccepting.isEmpty { partitions.append(nonAccepting) }
 
         var tokenGroups: [TokenClass: Set<Int>] = [:]
         for s in finals {
@@ -42,10 +46,13 @@ extension DFSA {
                 tokenGroups[token, default: []].insert(s)
             } else {
                 // Accepting state with no token class gets its own singleton block.
-                partitions.insert([s])
+                partitions.append([s])
             }
         }
-        for (_, group) in tokenGroups { partitions.insert(group) }
+        // Sort token groups by token id so partition order is stable.
+        for (_, group) in tokenGroups.sorted(by: { $0.key.id < $1.key.id }) {
+            partitions.append(group)
+        }
 
         // ── Hopcroft refinement loop ─────────────────────────────────────────
         var workList = Array(partitions)
@@ -60,19 +67,19 @@ extension DFSA {
                         getPredecessors(of: s, with: symbol, in: transitions))
                 }
 
-                var newPartitions: Set<Set<Int>> = []
+                var newPartitions: [Set<Int>] = []
                 for partition in partitions {
                     let inside  = partition.intersection(predecessors)
                     let outside = partition.subtracting(predecessors)
 
                     if inside.isEmpty || outside.isEmpty {
-                        newPartitions.insert(partition)     // no split
+                        newPartitions.append(partition)     // no split
                         continue
                     }
 
                     // Split: replace `partition` with the two halves.
-                    newPartitions.insert(inside)
-                    newPartitions.insert(outside)
+                    newPartitions.append(inside)
+                    newPartitions.append(outside)
 
                     // Update the work list.
                     if let idx = workList.firstIndex(of: partition) {
@@ -89,6 +96,10 @@ extension DFSA {
         }
 
         // ── Build the minimized DFA ──────────────────────────────────────────
+        // Sort partitions by their minimum state id so the new sequential ids
+        // are assigned deterministically across runs.
+        partitions.sort { $0.min() ?? -1 < $1.min() ?? -1 }
+
         // Assign a fresh sequential id to each equivalence class.
         var stateMap: [Int: Int] = [:]
         var newId = 0
