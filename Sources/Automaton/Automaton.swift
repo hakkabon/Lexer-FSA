@@ -120,8 +120,46 @@ extension Automaton: Graphvizable {
 
 
 extension Automaton where Subtype == NFSA {
-    
+
+    /// Creates an automaton wrapping a nondeterministic finite state.
+    /// Previously this initializer had an empty body and silently discarded
+    /// its arguments — `Automaton<NFSA>(initial: 5, …)` returned an empty
+    /// automaton with `initial == 0`. Now it actually populates `state`.
     public init(initial: Int, finals: Set<Int>, transitions: Set<Transition>) {
+        self.state = .nfa(initial: initial, finals: finals, transitions: transitions, tokenMap: [:])
+    }
+
+    /// Convenience initializer that attaches a token-class map up-front.
+    public init(
+        initial: Int,
+        finals: Set<Int>,
+        transitions: Set<Transition>,
+        tokenMap: [Int: TokenClass]
+    ) {
+        self.state = .nfa(
+            initial: initial, finals: finals,
+            transitions: transitions, tokenMap: tokenMap)
+    }
+
+    // MARK: - Token Tracking
+
+    /// Maps final-state identifiers to their token class. Empty by default.
+    public var tokenMap: [Int: TokenClass] { self.state.tokenMap }
+
+    /// Returns the token class attached to `finalState`, if any.
+    public func tokenClass(for finalState: Int) -> TokenClass? {
+        self.state.tokenClass(for: finalState)
+    }
+
+    /// Replaces the entire token-class map. Mutating.
+    public mutating func setTokenMap(_ newMap: [Int: TokenClass]) {
+        self.state.setTokenMap(newMap)
+    }
+
+    /// Runs the automaton against `s` and returns the token class attached to
+    /// the accepting state reached, or `nil` if `s` is rejected.
+    public func recognizeWithToken(string s: String) -> TokenClass? {
+        self.state.recognizeWithToken(string: s)
     }
     
     /// Simulates the automaton to determine if it accepts the given input string.
@@ -256,7 +294,46 @@ extension Automaton where Subtype == NFSA {
 
 extension Automaton where Subtype == DFSA {
 
+    /// Creates an automaton wrapping a deterministic finite state.
+    /// Previously this initializer had an empty body and silently discarded
+    /// its arguments — `Automaton<DFSA>(initial: 5, …)` returned an empty
+    /// automaton with `initial == 0`. Now it actually populates `state`.
     public init(initial: Int, finals: Set<Int>, transitions: Set<Transition>, minimal: Bool) {
+        self.state = .dfa(initial: initial, finals: finals, transitions: transitions, minimal: minimal, tokenMap: [:])
+    }
+
+    /// Convenience initializer that attaches a token-class map up-front.
+    public init(
+        initial: Int,
+        finals: Set<Int>,
+        transitions: Set<Transition>,
+        minimal: Bool = false,
+        tokenMap: [Int: TokenClass]
+    ) {
+        self.state = .dfa(
+            initial: initial, finals: finals,
+            transitions: transitions, minimal: minimal, tokenMap: tokenMap)
+    }
+
+    // MARK: - Token Tracking
+
+    /// Maps final-state identifiers to their token class. Empty by default.
+    public var tokenMap: [Int: TokenClass] { self.state.tokenMap }
+
+    /// Returns the token class attached to `finalState`, if any.
+    public func tokenClass(for finalState: Int) -> TokenClass? {
+        self.state.tokenClass(for: finalState)
+    }
+
+    /// Replaces the entire token-class map. Mutating.
+    public mutating func setTokenMap(_ newMap: [Int: TokenClass]) {
+        self.state.setTokenMap(newMap)
+    }
+
+    /// Runs the automaton against `s` and returns the token class attached to
+    /// the accepting state reached, or `nil` if `s` is rejected.
+    public func recognizeWithToken(string s: String) -> TokenClass? {
+        self.state.recognizeWithToken(string: s)
     }
 
     /// Simulates the automaton to determine if it accepts the given input string.

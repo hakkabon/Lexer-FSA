@@ -67,7 +67,7 @@ public enum State<T> {
         }
     }
     
-    mutating func setTokenMap(_ newMap: [Int: TokenClass]) {
+    mutating public func setTokenMap(_ newMap: [Int: TokenClass]) {
         switch self {
         case .nfa(let i, let f, let t, _):
             self = .nfa(initial: i, finals: f, transitions: t, tokenMap: newMap)

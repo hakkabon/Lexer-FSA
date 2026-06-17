@@ -21,6 +21,20 @@ public struct NFSA {
     public init(initial: Int, finals: Set<Int>, transitions: Set<Transition>) {
         self.state = .nfa(initial: initial, finals: finals, transitions: transitions, tokenMap: [:])
     }
+
+    /// Creates a nondeterministic finite state automaton with a token-class map
+    /// attached to its accepting states. Convenience overload so callers do
+    /// not have to follow construction with `nfa.state.setTokenMap(...)`.
+    public init(
+        initial: Int,
+        finals: Set<Int>,
+        transitions: Set<Transition>,
+        tokenMap: [Int: TokenClass]
+    ) {
+        self.state = .nfa(
+            initial: initial, finals: finals,
+            transitions: transitions, tokenMap: tokenMap)
+    }
 }
 
 extension NFSA: FSA {
@@ -77,6 +91,29 @@ extension NFSA: FSA {
     
     public func move(state: Int, symbol: Character, over transitions: Set<Transition>) -> Set<Int> {
         return self.state.move(state: state, symbol: symbol, over: transitions)
+    }
+
+    // MARK: - Token Tracking
+
+    /// Maps final-state identifiers to their token class. Empty by default.
+    public var tokenMap: [Int: TokenClass] { self.state.tokenMap }
+
+    /// Returns the token class attached to `finalState`, if any.
+    public func tokenClass(for finalState: Int) -> TokenClass? {
+        self.state.tokenClass(for: finalState)
+    }
+
+    /// Replaces the entire token-class map. Mutating.
+    public mutating func setTokenMap(_ newMap: [Int: TokenClass]) {
+        self.state.setTokenMap(newMap)
+    }
+
+    /// Runs the automaton against `s` and returns the token class attached to
+    /// the accepting state reached, or `nil` if `s` is rejected. For an NFA,
+    /// when several accepting states are simultaneously active the one with
+    /// the lowest `priority` integer wins.
+    public func recognizeWithToken(string s: String) -> TokenClass? {
+        self.state.recognizeWithToken(string: s)
     }
 }
 
