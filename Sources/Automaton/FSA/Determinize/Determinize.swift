@@ -56,18 +56,31 @@ extension State {
         }
 
         // ── Main subset-construction loop ────────────────────────────────────
-        let alphabet = transitions.alphabet().characters
+        //
+        // Optimisation (§3.5): the previous implementation iterated over
+        // `transitions.alphabet().characters`, which materialises every
+        // Unicode scalar in every range — thousands of characters for a
+        // regex like [\p{L}]. Instead we iterate over *equivalence
+        // classes* of the alphabet, computed from the boundary points of
+        // every transition range. Within each equivalence class the set
+        // of matching NFA transitions is constant, so the move set is
+        // constant across the class and we can emit a single `.range`
+        // transition covering the whole class.
+        let equivalenceClasses = computeAlphabetEquivalenceClasses(transitions)
 
         while let nfaStateSet = workList.popLast() {
             let currentDfaState = dfaStates[nfaStateSet]!
 
-            for symbol in alphabet {
+            for cls in equivalenceClasses {
 
-                // move(nfaStateSet, symbol)
+                // move(nfaStateSet, representative) — representative is
+                // any character in [cls.lo, cls.hi]; we use cls.lo.
+                let representative = Character(UnicodeScalar(cls.lo)!)
+
                 var nextNfaStates = Set<Int>()
                 for nfaState in nfaStateSet {
                     nextNfaStates.formUnion(
-                        move(state: nfaState, symbol: symbol, over: transitions))
+                        move(state: nfaState, symbol: representative, over: transitions))
                 }
                 guard !nextNfaStates.isEmpty else { continue }
 
@@ -91,8 +104,16 @@ extension State {
                     }
                 }
 
+                let rangeLabel: AlphabetRange
+                if cls.lo == cls.hi {
+                    rangeLabel = .char(Character(UnicodeScalar(cls.lo)!))
+                } else {
+                    rangeLabel = .range(
+                        Character(UnicodeScalar(cls.lo)!),
+                        Character(UnicodeScalar(cls.hi)!))
+                }
                 dfaTransitions.insert(
-                    Transition(from: currentDfaState, AlphabetRange.char(symbol), to: targetDfaState))
+                    Transition(from: currentDfaState, rangeLabel, to: targetDfaState))
             }
         }
 
@@ -130,5 +151,53 @@ extension State {
         stateSet.intersection(finals).min { a, b in
             (tokenMap[a]?.priority ?? Int.max) < (tokenMap[b]?.priority ?? Int.max)
         }
+    }
+
+    /// Computes the disjoint equivalence classes of the alphabet implied by
+    /// `transitions`.
+    ///
+    /// Two characters belong to the same equivalence class iff they match the
+    /// *same* set of transitions in `transitions`. We compute these by
+    /// collecting every range's lower bound and (upper bound + 1) as boundary
+    /// points; between two consecutive boundaries the matching-transition set
+    /// is constant.
+    ///
+    /// The result is a sorted list of half-open intervals expressed as
+    /// `(lo, hi)` inclusive pairs. ε-transitions are ignored.
+    ///
+    /// - Complexity: O(|Δ| · log |Δ|) — one sort of the boundary set.
+    private func computeAlphabetEquivalenceClasses(
+        _ transitions: Set<Transition>
+    ) -> [(lo: UInt32, hi: UInt32)] {
+        // Collect boundary points: every range's lo and (hi+1).
+        // We use UInt32 to support the full Unicode scalar range.
+        var boundaries = Set<UInt32>()
+        for t in transitions {
+            switch t.alphabetRange {
+            case .epsilon:
+                continue
+            case .char(let ch):
+                let v = ch.unicodeScalars.first!.value
+                boundaries.insert(v)
+                boundaries.insert(v + 1)
+            case .range(let lo, let hi):
+                let loV = lo.unicodeScalars.first!.value
+                let hiV = hi.unicodeScalars.first!.value
+                boundaries.insert(loV)
+                boundaries.insert(hiV + 1)
+            }
+        }
+        guard !boundaries.isEmpty else { return [] }
+
+        let sorted = boundaries.sorted()
+        var classes: [(lo: UInt32, hi: UInt32)] = []
+        for i in 0..<(sorted.count - 1) {
+            let lo = sorted[i]
+            let hi = sorted[i + 1] - 1
+            if hi >= lo {   // skip empty intervals (shouldn't happen, but defensive)
+                classes.append((lo, hi))
+            }
+        }
+        return classes
     }
 }
