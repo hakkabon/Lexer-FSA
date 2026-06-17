@@ -106,9 +106,12 @@ public struct Regex: RegularLanguage {
         }
         set(value) {
             if value, !internalState.isDeterministic {
-                guard case let .nfa(initial, finals, transitions, _) = self.state else { return }
-                let dfa = powerset(initial: initial, finals: finals, transitions: transitions)
-                self.state = .dfa(initial: dfa.initial, finals: dfa.finals, transitions: dfa.transitions, minimal: false, tokenMap: [:])
+                // Use the unified, token-aware powerset construction on
+                // `State<T>` (Determinize.swift). Previously this setter
+                // called `self.powerset(...)` in RegexPowerset.swift, which
+                // did *not* propagate the token map — silently dropping
+                // every TokenClass attached to the NFA's accepting states.
+                self.state.determinize()
                 internalState.isDeterministic = true
             }
         }

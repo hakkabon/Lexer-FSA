@@ -9,8 +9,14 @@
 import Foundation
 
 // MARK: - Determinization with Token Tracking
+//
+// Lives on the generic `State` extension rather than `State<NFSA>` so that
+// both `NFSA.determinize()` and `Regex.isDeterministic = true` go through
+// the *same* token-aware powerset construction. Previously `Regex` had its
+// own non-token-aware `powerset(...)` in RegexPowerset.swift; that path
+// silently dropped every TokenClass attached to the NFA's accepting states.
 
-extension State where T == NFSA {
+extension State {
 
     /// Converts this NFA into a DFA using the powerset (subset) construction,
     /// preserving the token-class map so that each DFA accepting state is labelled
@@ -91,13 +97,25 @@ extension State where T == NFSA {
         }
 
         // ── Replace this state with the resulting DFA ────────────────────────
-        self = .dfa(
-            initial:    dfaInitial,
-            finals:     dfaFinals,
-            transitions: dfaTransitions,
-            minimal:    false,
-            tokenMap:   dfaTokenMap
-        )
+        // We must preserve the phantom type T by re-wrapping through whichever
+        // case pattern matched above. The simplest portable approach is to
+        // re-construct via the concrete constructors the runtime already knows
+        // are valid (we matched `.nfa`, so the original T must accept a `.dfa`
+        // payload — this is true for NFSA, DFSA, and Regex alike because all
+        // three allow both enum cases).
+        switch self {
+        case .nfa:
+            self = .dfa(
+                initial:    dfaInitial,
+                finals:     dfaFinals,
+                transitions: dfaTransitions,
+                minimal:    false,
+                tokenMap:   dfaTokenMap
+            )
+        case .dfa:
+            // Already deterministic; guarded above. No-op.
+            return
+        }
     }
 
     // MARK: - Private helpers

@@ -70,9 +70,11 @@ public protocol RegularLanguageRecognition {
 
 public protocol RegularLanguageTransform {
 
-    /// Remove ε from Regular Language
+    /// Remove ε from Regular Language.
+    ///
+    /// Returns the (initial, finals, transitions) triple of an ε-free NFA
+    /// equivalent to the input. Token-class maps are *not* propagated by
+    /// this method — callers that need token tracking should operate on
+    /// `State<T>` directly rather than going through the tuple interface.
     mutating func removeEps(initial: Int, finals: Set<Int>, transitions: Set<Transition>) -> (initial: Int, finals: Set<Int>, transitions: Set<Transition>)
-
-    /// An NFA made deterministic by the powerset construction.
-    mutating func powerset(initial: Int, finals: Set<Int>, transitions: Set<Transition>) -> (initial: Int, finals: Set<Int>, transitions: Set<Transition>)
 }
