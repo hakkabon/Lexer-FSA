@@ -95,10 +95,8 @@ class TrieNode {
 
 extension TrieNode: Hashable {
     public func hash(into hasher: inout Hasher) {
-        func hash(into hasher: inout Hasher) {
-            hasher.combine(final)
-            hasher.combine(edges)
-        }
+        hasher.combine(final)
+        hasher.combine(edges)
     }
 }
 

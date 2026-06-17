@@ -18,8 +18,21 @@ public struct Transition {
     let target: Int
     
     /// Range of characters on transition between *from* and *to* states.
+    ///
+    /// - Note: For `.epsilon` transitions this returns an empty `Alphabet`,
+    ///   rather than synthesising a literal `𝛆` character. The previous
+    ///   implementation called `AlphabetRange.lower`/`upper` on `.epsilon`,
+    ///   both of which return `"𝛆"` — leaking a phantom character into the
+    ///   alphabet of any NFA that contained ε-transitions.
     var alphabet: Alphabet {
-        return Alphabet([Interval(self.alphabetRange.lower, self.alphabetRange.upper)], true)
+        switch alphabetRange {
+        case .epsilon:
+            return Alphabet([], true)
+        case let .char(ch):
+            return Alphabet([Interval(ch)], true)
+        case let .range(lo, hi):
+            return Alphabet([Interval(lo, hi)], true)
+        }
     }
     
     /// Creates a new transition between two given states.

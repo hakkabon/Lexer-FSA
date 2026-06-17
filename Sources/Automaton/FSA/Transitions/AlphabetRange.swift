@@ -120,7 +120,13 @@ extension AlphabetRange: Equatable {
 
 extension AlphabetRange: Comparable {
     public static func < (lhs: AlphabetRange, rhs: AlphabetRange) -> Bool {
+        // ε sorts before every other case; without these explicit cases the
+        // previous implementation recursively called `.epsilon < x` from
+        // inside its own arm, producing infinite recursion on any ε operand.
         switch (lhs, rhs) {
+        case (.epsilon, .epsilon): return false
+        case (.epsilon, _):        return true
+        case (_, .epsilon):        return false
         case let (.char(lch), .char(rch)):
             return lch < rch
         case let (.range(l1,l2), .range(r1,r2)):
@@ -129,10 +135,6 @@ extension AlphabetRange: Comparable {
             return (ch1,ch2) < (ch,ch)
         case let (.char(ch), .range(ch1,ch2)):
             return (ch,ch) < (ch1,ch2)
-        case let (.epsilon, x):
-            return .epsilon < x
-        case let (x, .epsilon):
-            return .epsilon < x
         }
     }
 }
@@ -274,6 +276,9 @@ extension AlphabetEpsRange: CustomStringConvertible {
 extension AlphabetEpsRange: Comparable {
     public static func < (lhs: AlphabetEpsRange, rhs: AlphabetEpsRange) -> Bool {
         switch (lhs, rhs) {
+        case (.epsilon, .epsilon): return false
+        case (.epsilon, _):        return true
+        case (_, .epsilon):        return false
         case let (.char(lch), .char(rch)):
             return lch < rch
         case let (.range(l1,l2), .range(r1,r2)):
@@ -282,10 +287,6 @@ extension AlphabetEpsRange: Comparable {
             return (ch1,ch2) < (ch,ch)
         case let (.char(ch), .range(ch1,ch2)):
             return (ch,ch) < (ch1,ch2)
-        case let (.epsilon, x):
-            return .epsilon < x
-        case let (x, .epsilon):
-            return .epsilon < x
         }
     }
 }

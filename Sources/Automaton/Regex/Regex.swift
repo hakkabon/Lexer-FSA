@@ -195,10 +195,13 @@ public struct Regex: RegularLanguage {
             }
         }
         for q in transitions.states() {
-            for s in epsClosure(state: q, over: transitions) {
-                if finals.contains(s) {
-                    finalStates.insert(s)
-                }
+            // Any state whose ε-closure intersects F becomes final itself
+            // (Algorithm 1.5.2 in Skut et al.). The previous implementation
+            // inserted the closure member `s` (an existing final) instead of
+            // the source state `q`, which made the transform a no-op on
+            // finals that should have been extended.
+            if !epsClosure(state: q, over: transitions).intersection(finals).isEmpty {
+                finalStates.insert(q)
             }
         }
         return (initial, finalStates, epsfree)

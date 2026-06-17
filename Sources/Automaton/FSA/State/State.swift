@@ -477,7 +477,14 @@ extension State where T == NFSA {
     /// - Returns: `true` if the transition exists, `false` otherwise.
     public func isSuccessor(source: Int, symbol: Character, target: Int) -> Bool {
         guard case let .nfa(initial: _, finals: _, transitions: transitions, _) = self else { return false }
-        return transitions.contains(Transition(from: source, AlphabetRange.char(symbol), to: target))
+        // Iterate transitions and ask each one if it matches the symbol,
+        // rather than synthesising a `.char(symbol)` Transition and looking
+        // it up via Set.contains. The latter missed any transition stored
+        // as a `.range` (e.g. [a-z]) even though step() would happily match
+        // the symbol against that range.
+        return transitions.contains {
+            $0.source == source && $0.target == target && $0.inAlphabet(char: symbol)
+        }
     }
     
     /// Computes the set of all states transitively reachable from `source` via
@@ -656,7 +663,11 @@ extension State where T == DFSA {
     /// - Returns: `true` if the transition exists, `false` otherwise.
     public func isSuccessor(source: Int, symbol: Character, target: Int) -> Bool {
         guard case let .dfa(_, _, transitions: transitions, _, _) = self else { return false }
-        return transitions.contains(Transition(from: source, AlphabetRange.char(symbol), to: target))
+        // Same fix as the NFA variant: match by `inAlphabet(char:)` so that
+        // `.range` transitions are recognised as successors too.
+        return transitions.contains {
+            $0.source == source && $0.target == target && $0.inAlphabet(char: symbol)
+        }
     }
     
     /// Computes the set of all states transitively reachable from `source` via
