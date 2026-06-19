@@ -56,14 +56,14 @@ extension FSA {
     /// during NFA construction, exactly when it is most useful.
     mutating func eliminateDeadStates() {
         switch self.state {
-        case let .nfa(initial, var finals, var transitions, var tokenMap):
+        case .nfa(let initial, var finals, var transitions, var tokenMap):
             // Forward reachability — keep only states reachable from the initial state.
             let stack = Stack<Int>()
             stack.push(initial)
             var reachables: Set<Int> = [initial]
             while !stack.isEmpty {
                 let q = stack.pop()
-                for s in reachableStates(from: q) {
+                for s in self.state.reachableStates(from: q) {
                     if reachables.insert(s).inserted { stack.push(s) }
                 }
             }
@@ -81,14 +81,14 @@ extension FSA {
             }
             self.state = .nfa(initial: initial, finals: finals, transitions: transitions, tokenMap: tokenMap)
 
-        case let .dfa(initial, var finals, var transitions, minimal, var tokenMap):
+        case .dfa(let initial, var finals, var transitions, let minimal, var tokenMap):
             // Forward reachability — keep only states reachable from the initial state.
             let stack = Stack<Int>()
             stack.push(initial)
             var reachables: Set<Int> = [initial]
             while !stack.isEmpty {
                 let q = stack.pop()
-                for s in reachableStates(from: q) {
+                for s in self.state.reachableStates(from: q) {
                     if reachables.insert(s).inserted { stack.push(s) }
                 }
             }
@@ -116,7 +116,7 @@ extension FSA {
     /// convenient.)
     mutating func removeDeadTransitions() {
         switch self.state {
-        case let .nfa(initial, finals, var transitions, tokenMap):
+        case .nfa(let initial, let finals, var transitions, let tokenMap):
             let all: Set<Int> = transitions.states()
             let forwardMap = transitions.forwardMap()
             var reachable: Set<Int> = [initial]
@@ -143,7 +143,7 @@ extension FSA {
             }
             self.state = .nfa(initial: initial, finals: finals, transitions: transitions, tokenMap: tokenMap)
 
-        case let .dfa(initial, finals, var transitions, minimal, tokenMap):
+        case .dfa(let initial, let finals, var transitions, let minimal, let tokenMap):
             let all: Set<Int> = transitions.states()
             let forwardMap = transitions.forwardMap()
             var reachable: Set<Int> = [initial]
@@ -175,7 +175,7 @@ extension FSA {
 
 extension Deterministic {
 
-    mutating func invariant() {
+    public mutating func invariant() {
         // deterministic()
         removeZombieAcceptStates()
         eliminateDeadStates()

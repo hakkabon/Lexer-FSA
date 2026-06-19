@@ -74,6 +74,10 @@ public protocol FSA {
     /// Indicates if `state` is an initial State.
     func isInitial(state: Int) -> Bool
     
+    /// All states transitively reachable from `source` via any sequence of labelled
+    /// transitions (ε and non-ε alike).
+    func reachableStates(from source: Int) -> Set<Int>
+
     func move(state: Int, symbol: Character, over transitions: Set<Transition>) -> Set<Int>
 }
 
@@ -162,8 +166,11 @@ public protocol Deterministic : FSA {
     func isSuccessor(source: Int, symbol: Character, target: Int) -> Bool
     
     /// Get all reachable states from `source` regardless of `symbol` on transitions.
-    func reachableStates(from source: Int) -> Set<Int>
+//    func reachableStates(from source: Int) -> Set<Int>
 
+    /// Deterministic invariant
+    mutating func invariant()
+    
     // MARK: - Factory Methods & Minimization
 
     /// Returns a randomly created Deterministic Finit Automaton.

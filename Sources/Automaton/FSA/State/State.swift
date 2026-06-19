@@ -111,7 +111,6 @@ extension State {
         switch self {
         case let .nfa(initial,_,_,_): return initial
         case let .dfa(initial,_,_,_,_): return initial
-//        case .empty: return 0
         }
     }
     
@@ -120,7 +119,6 @@ extension State {
         switch self {
         case let .nfa(_,finals,_,_): return finals
         case let .dfa(_,finals,_,_,_): return finals
-//        case .empty: return Set<Int>()
         }
     }
     
@@ -129,7 +127,6 @@ extension State {
         switch self {
         case let .nfa(_,_,transitions,_): return transitions.states().count
         case let .dfa(_,_,transitions,_,_): return transitions.states().count
-//        case .empty: return 0
         }
     }
     
@@ -138,7 +135,6 @@ extension State {
         switch self {
         case let .nfa(_,finals,_,_): return finals.count
         case let .dfa(_,finals,_,_,_): return finals.count
-//        case .empty: return 0
         }
     }
     
@@ -147,7 +143,6 @@ extension State {
         switch self {
         case let .nfa(_,_,transitions,_): return transitions.alphabet()
         case let .dfa(_,_,transitions,_,_): return transitions.alphabet()
-//        case .empty: return Alphabet([])
         }
     }
     
@@ -156,7 +151,6 @@ extension State {
         switch self {
         case let .nfa(_,finals,_,_): return finals.contains(state)
         case let .dfa(_,finals,_,_,_): return finals.contains(state)
-//        case .empty: return false
         }
     }
     
@@ -165,7 +159,6 @@ extension State {
         switch self {
         case let .nfa(initial,_,_,_): return initial == state
         case let .dfa(initial,_,_,_,_): return initial == state
-            //        case .empty: return false
         }
     }
 
@@ -265,6 +258,32 @@ extension State {
             }
         }
         return nil
+    }
+    
+    public func reachableStates(from source: Int) -> Set<Int> {
+        switch self {
+        case .dfa(_, _, let transitions, _, _):
+            var visited = Set<Int>([source])
+            var queue = [source]
+            while !queue.isEmpty {
+                let current = queue.removeFirst()
+                for t in transitions where t.source == current {
+                    if visited.insert(t.target).inserted { queue.append(t.target) }
+                }
+            }
+            return visited
+
+        case .nfa(_, _, let transitions, _):
+            var visited = Set<Int>([source])
+            var queue = [source]
+            while !queue.isEmpty {
+                let current = queue.removeFirst()
+                for t in transitions where t.source == current {
+                    if visited.insert(t.target).inserted { queue.append(t.target) }
+                }
+            }
+            return visited
+        }
     }
 }
 
@@ -495,18 +514,18 @@ extension State where T == NFSA {
     ///
     /// - Parameter source: The identifier of the starting state.
     /// - Returns: A `Set` of reachable state identifiers, including `source` itself.
-    public func reachableStates(from source: Int) -> Set<Int> {
-        guard case let .nfa(_, _, transitions, _) = self else { return Set<Int>() }
-        var visited = Set<Int>([source])
-        var queue   = [source]
-        while !queue.isEmpty {
-            let current = queue.removeFirst()
-            for t in transitions where t.source == current {
-                if visited.insert(t.target).inserted { queue.append(t.target) }
-            }
-        }
-        return visited
-    }
+//    public func reachableStates(from source: Int) -> Set<Int> {
+//        guard case let .nfa(_, _, transitions, _) = self else { return Set<Int>() }
+//        var visited = Set<Int>([source])
+//        var queue   = [source]
+//        while !queue.isEmpty {
+//            let current = queue.removeFirst()
+//            for t in transitions where t.source == current {
+//                if visited.insert(t.target).inserted { queue.append(t.target) }
+//            }
+//        }
+//        return visited
+//    }
 
     /// Adds a new transition to the automaton.
     ///
@@ -677,17 +696,22 @@ extension State where T == DFSA {
     ///
     /// - Parameter source: The identifier of the starting state.
     /// - Returns: A `Set` of reachable state identifiers, including `source` itself.
-    public func reachableStates(from source: Int) -> Set<Int> {
-        guard case let .dfa(_, _, transitions, _, _) = self else { return Set<Int>() }
-        var visited = Set<Int>([source])
-        var queue = [source]
-        while !queue.isEmpty {
-            let current = queue.removeFirst()
-            for t in transitions where t.source == current {
-                if visited.insert(t.target).inserted { queue.append(t.target) }
-            }
-        }
-        return visited
+//    public func reachableStates(from source: Int) -> Set<Int> {
+//        guard case let .dfa(_, _, transitions, _, _) = self else { return Set<Int>() }
+//        var visited = Set<Int>([source])
+//        var queue = [source]
+//        while !queue.isEmpty {
+//            let current = queue.removeFirst()
+//            for t in transitions where t.source == current {
+//                if visited.insert(t.target).inserted { queue.append(t.target) }
+//            }
+//        }
+//        return visited
+//    }
+
+    /// Deterministic invariant
+    mutating func invariant() {
+        
     }
 
     /// Minimizes this DFA. Delegates to `DFSA.minimize()`.

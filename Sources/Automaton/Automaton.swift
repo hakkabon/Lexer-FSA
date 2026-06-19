@@ -94,6 +94,10 @@ extension Automaton : FSA {
         self.state.isInitial(state: state)
     }
     
+    public func reachableStates(from source: Int) -> Set<Int> {
+        return self.state.reachableStates(from: source)
+    }
+
     public func move(state: Int, symbol: Character, over transitions: Set<Transition>) -> Set<Int> {
         return self.state.move(state: state, symbol: symbol, over: transitions)
     }
