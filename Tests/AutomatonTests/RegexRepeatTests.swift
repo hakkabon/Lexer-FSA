@@ -1,5 +1,5 @@
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 @Test
 func testSimpleRepeat1() throws {

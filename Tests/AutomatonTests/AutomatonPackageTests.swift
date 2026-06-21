@@ -28,7 +28,7 @@
 
 import Testing
 import Foundation
-@testable import Automaton
+@testable import LexerFSA
 
 
 // ──────────────────────────────────────────────────────────────────────────────

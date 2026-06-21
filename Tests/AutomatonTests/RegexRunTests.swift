@@ -1,5 +1,5 @@
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 // This construct is not implemented!
 //@Test

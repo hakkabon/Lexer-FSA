@@ -14,7 +14,7 @@
 //
 
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 // MARK: - Helper
 

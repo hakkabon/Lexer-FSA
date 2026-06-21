@@ -6,7 +6,7 @@
 // exist so a future refactor can't silently reintroduce them.
 
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 
 // ──────────────────────────────────────────────────────────────────────────────

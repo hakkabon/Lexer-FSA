@@ -1,5 +1,5 @@
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 // ──────────────────────────────────────────────────────────────────────────────
 // MARK: - Lexer (§3.1, §3.2)

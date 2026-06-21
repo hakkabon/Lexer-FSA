@@ -1,5 +1,5 @@
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 // dk.bricks.automaton has a bunch of regexp tests!
 

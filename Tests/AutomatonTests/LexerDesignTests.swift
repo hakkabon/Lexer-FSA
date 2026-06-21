@@ -25,7 +25,7 @@
 //
 
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 // Small local helper so we never need `return Issue.record(...)` inside a
 // `guard else { }` (which is illegal because `Issue.record` returns `Issue`,
@@ -125,7 +125,7 @@ private func makeLexer(rules: [(String, TokenClass, Regex)]) -> Lexer {
 }
 
 @Suite("Lexer end-to-end pipeline (regex -> union -> determinize -> scan)")
-struct LexerPipelineTests {
+struct LexerPipelineTests2 {
 
     private func makeNumIdentLexer() throws -> Lexer {
         try makeLexer(rules: [

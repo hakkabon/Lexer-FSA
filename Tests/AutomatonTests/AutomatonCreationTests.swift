@@ -1,5 +1,5 @@
 import XCTest
-@testable import Automaton
+@testable import LexerFSA
 
 class AutomatonCreationTests: XCTestCase {
 

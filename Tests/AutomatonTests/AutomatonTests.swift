@@ -1,5 +1,5 @@
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 
 // Create use-cases for unions minimize on/off with marker overlapping

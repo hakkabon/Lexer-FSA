@@ -15,7 +15,7 @@
 //  2. The missing "scan a longer buffer into a token stream" capability
 
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 
 @Suite("Multi-Pattern Lexer Pipeline")

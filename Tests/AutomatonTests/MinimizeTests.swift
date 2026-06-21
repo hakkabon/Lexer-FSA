@@ -13,7 +13,7 @@
 //  5. A documented, currently-failing-to-minimize-correctly case (see issue below)
 
 import Testing
-@testable import Automaton
+@testable import LexerFSA
 
 
 // ──────────────────────────────────────────────────────────────────────────────
