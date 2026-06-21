@@ -4,21 +4,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "grammar-fsa",
+    name: "lexer-fsa",
     platforms: [.macOS(.v11), .iOS(.v12)],
     products: [
-        .library(name: "Automaton", targets: ["Automaton"])
+        .library(name: "LexerFSA", targets: ["LexerFSA"])
     ],
     dependencies: [
         .package(url: "https://github.com/SwiftDocOrg/GraphViz", from: "0.4.0"),
     ],
     targets: [
         .target(
-            name: "Automaton",
+            name: "LexerFSA",
             dependencies: [
                 .product(name: "GraphViz", package: "graphViz"),
             ]
         ),
-        .testTarget(name: "AutomatonTests", dependencies: ["Automaton"]),
+        .testTarget(name: "LexerFSATests", dependencies: ["LexerFSA"]),
     ]
 )
