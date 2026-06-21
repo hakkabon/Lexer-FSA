@@ -3,7 +3,6 @@
 //  lexer-fsa
 //
 //  Created by Ulf Akerstedt-Inoue on 2020/06/03.
-//  Copyright © 2020 hakkabon software. All rights reserved.
 //
 
 import Foundation
@@ -20,18 +19,15 @@ import Foundation
 // │ 1. Augment: append the # sentinel to form the augmented expression r#.  │
 // │    The # leaf receives the highest position N.                          │
 // │                                                                         │
-// │ 2. Build a positional parse tree in one pass over the Expression AST.   │
-// │    Every leaf gets a unique integer position 1…N from a local counter.  │
-// │    Record position → Expression in leafExpressions simultaneously.      │
+// │ 2. Build a positional tree (`RegexNode`) in one pass over the           │
+// │    Expression AST. Every leaf gets a unique integer position 1…N from a │
+// │    local counter. Record position → Expression in leafExpressions       │
+// │    simultaneously.                                                      │
 // │                                                                         │
-// │ 3. Compute nullable, firstpos, lastpos bottom-up (postorder).           │
+// │ 3. Compute nullable, firstpos, lastpos AND followpos together, bottom-  │
+// │    up, in a single O(n) pass (`computeAttributesAndFollowPos`).         │
 // │                                                                         │
-// │ 4. Compute followpos top-down (preorder):                               │
-// │    • Con(c1, c2): ∀ p ∈ lastpos(c1): followpos(p) ∪= firstpos(c2)       │
-// │    • Rep(c):      ∀ p ∈ lastpos(c):  followpos(p) ∪= firstpos(c)        │
-// │    • Or, Opt:     children inherit the node's own follow set.           │
-// │                                                                         │
-// │ 5. DFA construction directly from followpos:                            │
+// │ 4. DFA construction directly from followpos:                            │
 // │    initState = firstpos(root)                                           │
 // │    while unmarked DFA state S exists:                                   │
 // │      for each symbol a ≠ # in the alphabet:                             │
@@ -40,44 +36,67 @@ import Foundation
 // │    S is accepting iff N ∈ S                                             │
 // └─────────────────────────────────────────────────────────────────────────┘
 //
-// Bugs fixed vs the original implementation
-// ──────────────────────────────────────────
-// BUG 1 — Counter.shared collision (critical)
-//   Leaf.init() calls Counter.shared(), advancing the global singleton.
-//   The original lookup table was keyed 1…N via zip(1...count, chars), but
-//   leaf.pos values were whatever the shared counter happened to be — so
-//   lookup[leaf.pos] always returned nil and every DFA transition was silently
-//   dropped.  Fix: assign leaf.pos from a private, instance-local counter that
-//   starts at 0 for every BerrySethi instance.
+// Design notes — migration from `ParseNode` to `RegexNode`
+// ──────────────────────────────────────────────────────────
+// The parse tree used to be a class hierarchy (`ParseNode` / `Or` / `Con` /
+// `Opt` / `Rep` / `Leaf`, see git history) with mutable per-node attribute
+// fields, a `weak var parent`, and two separate traversals (postorder for
+// nullable/first/last, preorder for followpos) glued together by a "phantom
+// root" node that existed solely to dodge a `parent != nil` guard. It is now
+// `RegexNode` (see RegexNode.swift): an immutable, indirect value enum, plus
+// pure functions over it. Three things changed as a direct result:
 //
-// BUG 2 — '#' sentinel not parsed as .empty (critical)
-//   RegexParser.parseSimpleExpression() only recognises '#' as Expression.empty
-//   when flags.contains(.empty).  The original code forwarded the caller's flags
-//   unchanged, so '#' was parsed as a literal character — the augmented sentinel
-//   was lost.  Fix: always enable .empty when constructing the augmented parser.
+//   • No `Opt` case. `a?` is built as `.alternation(a, .empty)` (`a|ε`).
+//     `.alternation`'s existing rule already produces the right
+//     nullable/firstpos/lastpos for this with no extra logic anywhere.
 //
-// BUG 3 — Root node never visited by postorder/preorder (critical)
-//   ParseNode.postorder calls apply(self) only when self.parent != nil.
-//   The root node has no parent, so its nullable/firstpos/lastpos are never
-//   computed and root.first stays empty — the DFA's initial state was always
-//   the empty set, producing an automaton that rejects every string.
-//   Fix: wrap the real root in a phantom parent node so the traversal visits it.
+//   • No dummy "never matched" leaf for the empty string. The old code
+//     modelled `.string("")` with an `Opt` wrapping a `Leaf` carrying a
+//     sentinel character ("\0") specifically chosen not to collide with the
+//     real alphabet. `RegexNode.empty` already means exactly
+//     nullable/firstpos=∅/lastpos=∅ with **no** leaf at all, so
+//     `.string("")` now maps directly to `.empty` — no placeholder character,
+//     no position consumed, nothing to accidentally match.
 //
-// BUG 4 — Wrong followpos rule for Con (logic error)
-//   The original code propagated firstpos(c2) into children[0].follow directly,
-//   conflating the node-level follow set with the per-position followpos table.
-//   Fix: apply the textbook rule — ∀ p ∈ lastpos(c1): followpos(p) ∪= firstpos(c2).
+//   • Attributes and followpos are computed in one O(n) traversal
+//     (`computeAttributesAndFollowPos`, in RegexNode.swift) instead of two.
+//     There is no per-node mutable `follow` field threading state between a
+//     preorder pass and the followpos table — the `.concat` case applies the
+//     textbook rule directly, which also removes any possibility of
+//     reintroducing the historical bug where a node-level "follow" set got
+//     conflated with the per-position followpos table.
 //
-// BUG 5 — Leaf-count vs position-count mismatch (critical)
-//   The original code built the parse tree via unparse() and the lookup table
-//   via positional() (raw character counting).  For character ranges [a-z] the
-//   string contributes ≥ 3 raw characters but only 1 Leaf node; for .string("abc")
-//   the string has 3 raw characters but only 1 Leaf.  Fix: build the tree and
-//   fill leafExpressions in a single pass over the Expression AST.
+// One thing that did *not* change, and is worth calling out explicitly: the
+// augmented `#` sentinel is still represented as a genuine *leaf* (a
+// `RegexNode.symbol` with its own position) and is recorded under
+// `Expression.empty` in `leafExpressions` — it is emphatically **not**
+// `RegexNode.empty`. `RegexNode.empty` is the structural epsilon described
+// above (no position, vanishes from every firstpos/lastpos set).
+// Conflating the two would silently reproduce "the DFA never has a final
+// state" — the new design doesn't prevent that mistake by construction, it
+// only makes it a single, clearly-commented call site (`makeLeaf(expr)` in
+// the `.empty` case of `buildRegexNode`) instead of a half-page reference
+// counting fix. `dfaHasFinalStates` / `classicAhoCatDotStarAbb` etc. in the
+// test suite guard against this regressing.
 //
-// BUG 6 — .string(s) creates one Leaf for multiple characters
-//   A string literal like "abc" needs three independent positions.  Fix: expand
-//   .string(s) into nested Con nodes of single .char leaves.
+// Bugs inherited (and still fixed) from the previous implementation
+// ───────────────────────────────────────────────────────────────────
+// These were genuine logic bugs independent of which tree representation is
+// used, so the fixes carry over unchanged:
+//
+//   • Leaf positions come from a private, instance-local counter, not
+//     `Counter.shared` — two `BerrySethi` instances (or a `BerrySethi` run
+//     after a `Thompson` run, which also used `Counter.shared`) must not
+//     observe each other's leaf numbering.
+//   • The augmented parser always enables `.empty` so `#` is recognised as
+//     `Expression.empty` rather than a literal character.
+//   • `.string(s)` expands into a chain of single-character positions (one
+//     `RegexNode.symbol` per character) rather than one leaf for the whole
+//     string.
+//   • The parse tree and `leafExpressions` lookup table are built in one pass
+//     over the `Expression` AST so position numbering can never drift out of
+//     sync with character ranges / strings / intervals, which contribute a
+//     different number of raw characters than leaves.
 
 extension Regex {
 
@@ -95,6 +114,10 @@ extension Regex {
 
         /// Maps leaf position p (1-based) → the Expression at that leaf.
         /// Built atomically with the parse tree so positions are always aligned.
+        /// This remains the single source of truth for *matching* — including
+        /// for leaf kinds (ranges, anyChar, the sentinel) that `RegexNode.symbol`
+        /// cannot represent precisely with its one `Character` payload. See
+        /// `representativeCharacter(for:)` and `leafMatches(position:character:)`.
         var leafExpressions: [Int: Expression] = [:]
 
         /// All input characters that appear in the expression (excludes # sentinel).
@@ -103,7 +126,7 @@ extension Regex {
         /// followpos(p) for each leaf position p.
         var followpos: [Int: Set<Int>] = [:]
 
-        // Local leaf-position counter (BUG 1 fix)
+        // Local leaf-position counter, independent of Counter.shared.
         private var leafCounter: Int = 0
 
         private mutating func nextLeafPos() -> Int {
@@ -126,7 +149,7 @@ extension Regex {
             return id
         }
 
-        // MARK: – Initialiser (BUG 2 fix)
+        // MARK: – Initialiser
 
         init(expression: String, flags: SyntaxOptions) {
             // Always enable .empty so the parser recognises '#' as Expression.empty.
@@ -140,96 +163,16 @@ extension Regex {
             // Parse the augmented expression r#.
             self.expression = try parser.parse()
 
-            // Build the positional parse tree.
-            // `realRoot` is the Con(r, Leaf(#)) node whose first/last we need.
-            // We wrap it in a phantom parent so the traversal visits it (BUG 3 fix).
-            let realRoot = buildPositionalTree(self.expression)
-            let phantom  = ParseNode()
-            phantom.addChild(realRoot)
+            // Build the positional tree. No phantom parent node is needed: a
+            // value type has no "this node has no parent" special case to
+            // dodge, so `root`'s own attributes are simply the result of
+            // calling the attribute function on it directly.
+            let root = buildRegexNode(self.expression)
 
-            // nullable, firstpos, lastpos (bottom-up postorder).
-            // phantom.postorder visits realRoot because realRoot.parent = phantom ≠ nil.
-            phantom.postorder { node in
-                switch node {
-                case is Or:
-                    node.nullable = node.children[0].nullable || node.children[1].nullable
-                    node.first    = node.children[0].first.union(node.children[1].first)
-                    node.last     = node.children[0].last.union(node.children[1].last)
-                case is Con:
-                    node.nullable = node.children[0].nullable && node.children[1].nullable
-                    node.first    = node.children[0].nullable
-                        ? node.children[0].first.union(node.children[1].first)
-                        : node.children[0].first
-                    node.last     = node.children[1].nullable
-                        ? node.children[0].last.union(node.children[1].last)
-                        : node.children[1].last
-                case is Opt:
-                    node.nullable = true
-                    node.first    = node.children[0].first
-                    node.last     = node.children[0].last
-                case is Rep:
-                    node.nullable = true
-                    node.first    = node.children[0].first
-                    node.last     = node.children[0].last
-                case is Leaf:
-                    node.nullable = false
-                    node.first    = [node.pos]
-                    node.last     = [node.pos]
-                default:
-                    fatalError("BerrySethi postorder: unhandled ParseNode type \(type(of: node))")
-                }
-            }
-
-            // followpos (top-down preorder, BUG 4 fix).
-            //
-            // The correct Con rule: for every p in lastpos(c1), followpos(p) ∪= firstpos(c2).
-            // The original code set children[0].follow ∪= children[1].first which confused
-            // the node-level follow propagation with the per-position followpos table.
-            //
-            // phantom.preorder applies the closure to phantom first (apply(phantom)), but
-            // phantom is not Or/Con/Opt/Rep/Leaf — it falls through to `default` which we
-            // handle as a no-op below.  All real nodes are visited correctly.
-            phantom.preorder { node in
-                switch node {
-                case is Or:
-                    node.children[0].follow.formUnion(node.follow)
-                    node.children[1].follow.formUnion(node.follow)
-
-                case is Con:
-                    // c2 always inherits Con's follow.
-                    node.children[1].follow.formUnion(node.follow)
-                    // ∀ p ∈ lastpos(c1): followpos(p) ∪= firstpos(c2)
-                    for p in node.children[0].last {
-                        followpos[p, default: []].formUnion(node.children[1].first)
-                        // If c2 is nullable, p also inherits Con's own follow.
-                        if node.children[1].nullable {
-                            followpos[p, default: []].formUnion(node.follow)
-                        }
-                    }
-                    // c1 inherits Con's follow only when c2 is nullable.
-                    if node.children[1].nullable {
-                        node.children[0].follow.formUnion(node.follow)
-                    }
-
-                case is Opt:
-                    node.children[0].follow.formUnion(node.follow)
-
-                case is Rep:
-                    // Back-edge: ∀ p ∈ lastpos(Rep): followpos(p) ∪= firstpos(Rep)
-                    for p in node.last {
-                        followpos[p, default: []].formUnion(node.first)
-                    }
-                    node.children[0].follow.formUnion(node.follow)
-
-                case is Leaf:
-                    // Leaves receive their follow set from their parent's rule above.
-                    // Accumulate it now into the followpos table.
-                    followpos[node.pos, default: []].formUnion(node.follow)
-
-                default:
-                    break   // phantom root — no action needed
-                }
-            }
+            // nullable, firstpos, lastpos AND followpos, computed together in
+            // a single bottom-up O(n) pass. See RegexNode.swift for why this
+            // is not the same as calling `computeAttributes` + `computeFollowPos`.
+            let rootAttrs = computeAttributesAndFollowPos(for: root, into: &followpos)
 
             if debug {
                 print("=== Berry-Sethi: positions ===")
@@ -237,8 +180,8 @@ extension Regex {
                     print("  \(pos): \(expr.description)")
                 }
                 print("alphabet: \(alphabet.sorted())")
-                print("firstpos(root): \(realRoot.first.sorted())")
-                print("lastpos(root):  \(realRoot.last.sorted())")
+                print("firstpos(root): \(rootAttrs.firstpos.sorted())")
+                print("lastpos(root):  \(rootAttrs.lastpos.sorted())")
                 print("followpos:")
                 for (p, fps) in followpos.sorted(by: { $0.key < $1.key }) {
                     print("  followpos(\(p)) = \(fps.sorted())")
@@ -246,52 +189,44 @@ extension Regex {
             }
 
             // DFA construction directly from followpos sets.
-            return buildDFA(root: realRoot)
+            return buildDFA(initPositions: rootAttrs.firstpos)
         }
 
-        // MARK: – Positional parse tree construction (BUG 5 & 6 fix)
-        //
-        // We walk the Expression AST once and atomically:
-        //   • create the corresponding ParseNode,
-        //   • assign the next local position to every leaf,
-        //   • record the leaf's Expression in leafExpressions.
-        //
-        // This guarantees the parse tree positions and the lookup table are
-        // always perfectly aligned — regardless of character ranges, string
-        // literals, or any other multi-character Expression.
+        // MARK: – Positional tree construction
 
-        private mutating func buildPositionalTree(_ expr: Expression) -> ParseNode {
+        /// Walks the `Expression` AST once and atomically:
+        ///   • builds the corresponding `RegexNode`,
+        ///   • assigns the next local position to every leaf,
+        ///   • records the leaf's `Expression` in `leafExpressions`.
+        ///
+        /// This guarantees the tree's leaf positions and the lookup table are
+        /// always perfectly aligned — regardless of character ranges, string
+        /// literals, or any other multi-character `Expression`.
+        private mutating func buildRegexNode(_ expr: Expression) -> RegexNode {
             switch expr {
 
             case let .union(e1, e2):
-                let node = Or()
-                node.addChild(buildPositionalTree(e1))
-                node.addChild(buildPositionalTree(e2))
-                return node
+                return .alternation(buildRegexNode(e1), buildRegexNode(e2))
 
             case let .concatenation(e1, e2):
-                let node = Con()
-                node.addChild(buildPositionalTree(e1))
-                node.addChild(buildPositionalTree(e2))
-                return node
+                return .concat(buildRegexNode(e1), buildRegexNode(e2))
 
             case let .optional(e):
-                let node = Opt()
-                node.addChild(buildPositionalTree(e))
-                return node
+                // a? ≡ a|ε — see "Design notes" above. No dedicated leaf or
+                // node kind is needed; `.alternation` with `.empty` already
+                // has exactly the right nullable/firstpos/lastpos.
+                return .alternation(buildRegexNode(e), .empty)
 
             case let .repeat(e):
-                let node = Rep()
-                node.addChild(buildPositionalTree(e))
-                return node
+                return .star(buildRegexNode(e))
 
             // Derived repetition operators: expand to primitives so each copy
             // of the sub-expression gets independent positions.
             case let .repeatMin(e, n):
-                return buildPositionalTree(expandRepeatMin(e, n: n))
+                return buildRegexNode(expandRepeatMin(e, n: n))
 
             case let .repeatMinMax(e, n, m):
-                return buildPositionalTree(expandRepeatMinMax(e, n: n, m: m))
+                return buildRegexNode(expandRepeatMinMax(e, n: n, m: m))
 
             // ── Leaf cases ──────────────────────────────────────────────────
 
@@ -300,9 +235,9 @@ extension Regex {
                 return makeLeaf(expr)
 
             case let .charRange(lo, hi):
-                // One leaf position covering the entire range.
-                // Expand the range into `alphabet` so the DFA loop can test
-                // individual characters against this position via leafMatches().
+                // One leaf position covering the entire range. Expand the
+                // range into `alphabet` so the DFA loop can test individual
+                // characters against this position via leafMatches().
                 if let loV = lo.unicodeScalars.first?.value,
                    let hiV = hi.unicodeScalars.first?.value, loV <= hiV {
                     for v in loV ... hiV {
@@ -319,46 +254,62 @@ extension Regex {
                 return makeLeaf(expr)
 
             case let .string(s):
-                // BUG 6 fix: a string literal is a chain of single-character positions.
-                // Expanding it into nested Con nodes gives every character its own
-                // independent position, matching the theoretical requirement.
+                // A string literal is a chain of single-character positions.
+                // Expanding it into nested `.concat` nodes gives every
+                // character its own independent position, matching the
+                // theoretical requirement.
                 guard !s.isEmpty else {
-                    // ε — model as Opt(dummy) so nullable=true, firstpos=∅.
-                    let opt   = Opt()
-                    let dummy = makeLeaf(.char("\0"))   // never matched; not in alphabet
-                    opt.addChild(dummy)
-                    return opt
+                    // ε — modelled directly as `.empty`: nullable, firstpos =
+                    // lastpos = ∅, no leaf/position consumed at all.
+                    return .empty
                 }
                 let chars = Array(s)
-                if chars.count == 1 { return buildPositionalTree(.char(chars[0])) }
-                var result = buildPositionalTree(.char(chars[0]))
+                var result = buildRegexNode(.char(chars[0]))
                 for i in 1 ..< chars.count {
-                    let con = Con()
-                    con.addChild(result)
-                    con.addChild(buildPositionalTree(.char(chars[i])))
-                    result = con
+                    result = .concat(result, buildRegexNode(.char(chars[i])))
                 }
                 return result
 
             case .anyString:
-                return buildPositionalTree(.repeat(.anyChar))
+                return buildRegexNode(.repeat(.anyChar))
 
             case let .interval(lo, hi, digits):
-                return buildPositionalTree(expandInterval(lo: lo, hi: hi, digits: digits))
+                return buildRegexNode(expandInterval(lo: lo, hi: hi, digits: digits))
 
             case .empty:
-                // The '#' sentinel.  Deliberately NOT added to `alphabet`.
+                // The '#' sentinel (or an explicit empty-language literal).
+                // This MUST become a real leaf with its own position — NOT
+                // `RegexNode.empty`. See "Design notes" above.
                 return makeLeaf(expr)
             }
         }
 
         // MARK: – Leaf factory
 
-        private mutating func makeLeaf(_ expr: Expression) -> Leaf {
-            let leaf = Leaf(expr)          // Leaf.init() sets pos via Counter.shared;
-            leaf.pos = nextLeafPos()       // we override with our local counter.
-            leafExpressions[leaf.pos] = expr
-            return leaf
+        private mutating func makeLeaf(_ expr: Expression) -> RegexNode {
+            let pos = nextLeafPos()
+            leafExpressions[pos] = expr
+            return .symbol(representativeCharacter(for: expr), id: pos)
+        }
+
+        /// A cosmetic stand-in character for leaf kinds that aren't a single
+        /// literal character (ranges, "any char", the sentinel).
+        ///
+        /// `RegexNode.symbol` carries exactly one `Character`, but several
+        /// `Expression` leaf kinds (charRange, anyChar, the `#` sentinel) are
+        /// not a single literal character. Matching never reads this value —
+        /// `leafMatches(position:character:)` always consults
+        /// `leafExpressions[id]`, which is the authoritative record of what a
+        /// position actually matches. This function exists purely so
+        /// `RegexNode.symbol`'s `description` stays readable in debug output.
+        private func representativeCharacter(for expr: Expression) -> Character {
+            switch expr {
+            case let .char(ch): return ch
+            case let .charRange(lo, _): return lo
+            case .anyChar: return "."
+            case .empty: return "#"
+            default: return "?"
+            }
         }
 
         // MARK: – Expansion helpers for derived operators
@@ -399,15 +350,14 @@ extension Regex {
 
         // MARK: – DFA construction from followpos
 
-        private mutating func buildDFA(root: ParseNode) -> State<Regex> {
-            let sentinelPos  = leafCounter          // the # position is the highest one
-            let initPositions = root.first
+        private mutating func buildDFA(initPositions: Set<Int>) -> State<Regex> {
+            let sentinelPos = leafCounter          // the # position is the highest one
             _ = dfaStateID(for: initPositions)      // state 0 = initial
 
             var worklist: [Set<Int>] = [initPositions]
-            var visited   = Set<Set<Int>>()
+            var visited = Set<Set<Int>>()
             var dfaFinals = Set<Int>()
-            var dfaTrans  = Set<Transition>()
+            var dfaTrans = Set<Transition>()
 
             while !worklist.isEmpty {
                 let positions = worklist.removeFirst()
@@ -445,30 +395,30 @@ extension Regex {
             }
 
             return .dfa(
-                initial:     dfaStateID(for: initPositions),
-                finals:      dfaFinals,
+                initial: dfaStateID(for: initPositions),
+                finals: dfaFinals,
                 transitions: dfaTrans,
-                minimal:     false,
-                tokenMap:    [:]
+                minimal: false,
+                tokenMap: [:]
             )
         }
 
         // MARK: – Leaf-to-character matching
 
         /// Returns true iff the leaf at position `p` accepts the character `ch`.
-        /// Delegates to the stored Expression rather than a separate lookup table
-        /// so range expressions are handled correctly and there is no
-        /// position-alignment risk.
+        /// Delegates to the stored Expression rather than to `RegexNode.symbol`'s
+        /// cosmetic `Character` payload, so range expressions are handled
+        /// correctly and there is no position-alignment risk.
         private func leafMatches(position p: Int, character ch: Character) -> Bool {
             guard let expr = leafExpressions[p] else { return false }
             switch expr {
-            case let .char(c):           return c == ch
+            case let .char(c): return c == ch
             case let .charRange(lo, hi): return lo <= ch && ch <= hi
-            case .anyChar:               return true
-            case .anyString:             return true
-            case .empty:                 return false   // '#' sentinel — never matched
-            case let .string(s):         return s.count == 1 && s.first == ch
-            default:                     return false
+            case .anyChar: return true
+            case .anyString: return true
+            case .empty: return false   // '#' sentinel — never matched
+            case let .string(s): return s.count == 1 && s.first == ch
+            default: return false
             }
         }
     }
