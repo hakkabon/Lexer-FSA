@@ -81,12 +81,6 @@ extension Regex {
 
         /// The current scanning position (index) in the source code.
         private var index: String.Index
-                
-        init(expression source: String, _ flags: SyntaxOptions) {
-            self.string = source
-            self.flags = flags
-            self.index = source.startIndex
-        }
 
         /// Returns current character
         var current: Character {
@@ -99,6 +93,12 @@ extension Regex {
             return index < string.endIndex
         }
 
+        init(expression source: String, _ flags: SyntaxOptions) {
+            self.string = source
+            self.flags = flags
+            self.index = source.startIndex
+        }
+
         /// Advances index pointer one step forward.
         mutating func nextIndex() {
             index = string.index(after: index)
@@ -109,26 +109,19 @@ extension Regex {
             return more ? s.contains(current) : false
         }
 
-        /// Returns current character
-        mutating func parseAny() -> Character {
-            let ch = current
-            nextIndex()
-            return ch
-        }
-
         /// Advance the code stream past all characters which match a given definition,
         /// and return them concatenated as a String.
         /// - Parameter matches: A function which defines which characters "match"
         /// - Returns: the string mached
         mutating func parse(while condition:(Character) -> Bool) -> String {
             var lexeme = ""
-            while condition(current) {
+            while more && condition(current) { 
                 lexeme += String(current)
                 nextIndex()
             }
             return lexeme
         }
-
+        
         /// Matches given character against current character.
         /// if matched current token is consumed
         mutating func match(_ ch: Character) -> Bool {
@@ -159,10 +152,19 @@ extension Regex {
             }
             return e
         }
+        
+        mutating func parseIntersection() throws -> Expression {
+            let e = try parseConcatenation()
+            if match("&") {
+//                return .intersection(e, try parseIntersection())      // Assuming .intersection exists in your AST
+                throw ParseError.illegalSyntax(count(before: index))    // remove this when .intersection(expression,expression) implemented
+            }
+            return e
+        }
 
         mutating func parseConcatenation() throws -> Expression {
             let e = try parseRepetition()
-            if more && !peek(")|") {
+            if more && !peek(")|&") { // <-- Added '&' here
                 return .concatenation(e, try parseConcatenation())
             }
             return e
@@ -194,19 +196,19 @@ extension Regex {
             }
             return e
         }
-        
+
         mutating func parseCharClassExp() throws -> Expression {
             if match("[") {
-//                var negate = false
-//                if match("^") { negate = true }
+                let negate = match("^")
                 let e = try parseCharClasses()
-//                if negate { e = .intersection(.anyChar, .complement(e)) }
                 if !match("]") { throw ParseError.unexpectedCharacter("]", current, count(before: index)) }
-                return e
+                // Let the backend handle the negation of these specific characters
+//                return negate ? .negatedClass(e) : e      //
+                return e                                    // remove this when .negatedClass() implemented
             }
             return try parseSimpleExpression()
         }
-        
+                
         mutating func parseCharClasses() throws -> Expression {
             var e = try parseCharClass()
             while more && !peek("]") {
@@ -230,8 +232,8 @@ extension Regex {
             else if flags.contains(.anyString) && match("@") { return .anyString }
             else if match("'") {
                 let start = index
-                _ = parse(while: { !"\"".contains($0) })
-                if !match("\"") { throw ParseError.unexpectedCharacter("\"", current, count(before: index)) }
+                _ = parse(while: { !"'".contains($0) })
+                if !match("'") { throw ParseError.unexpectedCharacter("'", current, count(before: index)) }
                 return .string(String(string[start..<index]))
             } else if match("(") {
                 if match(")") { return .string("") }
@@ -271,8 +273,26 @@ extension Regex {
             return try .char(parseCharExp())
         }
 
+        /// Returns current character
+        mutating func parseAny() -> Character {
+            let ch = current
+            nextIndex()
+            return ch
+        }
+
         mutating func parseCharExp() throws -> Character {
-            _ = match("\\")
+            if match("\\") {
+                let c = parseAny()
+                switch c {
+                case "n": return "\n"
+                case "t": return "\t"
+                case "r": return "\r"
+                case "\\": return "\\"
+                case "\"": return "\""
+                // Add \uXXXX unicode handling here later if you wish
+                default: return c // E.g., \* simply returns *
+                }
+            }
             return parseAny()
         }
     }

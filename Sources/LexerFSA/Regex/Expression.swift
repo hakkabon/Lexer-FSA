@@ -12,10 +12,12 @@ import Foundation
 public indirect enum Expression: Hashable {
     case union(Expression,Expression)
     case concatenation(Expression,Expression)
+//    case intersection(Expression,Expression)
     case optional(Expression)
     case `repeat`(Expression)
     case repeatMin(Expression,Int)
     case repeatMinMax(Expression,Int,Int)
+//    case negatedCharClasses([Expression]))
     case charRange(Character,Character)
     case char(Character)
     case anyChar
