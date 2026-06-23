@@ -1,6 +1,9 @@
-# GrammarFSA — Technical Reference
+The view truncated the middle (lines 153–477). Let me get that section too so I can give you the complete file.Still missing lines 269–361. Let me get that section to complete the picture.Here is the complete `Technical.md` file (629 lines):
 
-This document gives an in-depth account of the design, data structures, algorithms, and in-progress work that make up the GrammarFSA Swift package. It is aimed at contributors and integrators who need to understand the internals rather than just the public API.
+```markdown
+# Lexer-FSA — Technical Reference
+
+This document gives an in-depth account of the design, data structures, algorithms, and in-progress work that make up the Lexer-FSA Swift package. It is aimed at contributors and integrators who need to understand the internals rather than just the public API.
 
 ---
 
@@ -36,7 +39,7 @@ A **Nondeterministic Finite Automaton** (NFA) is the 5-tuple (Q, Σ, Δ, q₀, F
 
 A **Deterministic Finite Automaton** (DFA) replaces Δ with δ : Q × Σ → Q, guaranteeing at most one successor per (state, symbol) pair and eliminating ε-transitions. DFAs and NFAs accept exactly the same class of languages — the **regular languages**.
 
-GrammarFSA models both representations in a single `State<T>` enum, using Swift's phantom-type mechanism to enforce that NFA-only operations (e.g., `epsClosure`) and DFA-only operations (e.g., `minimize`) are statically scoped to the correct automaton kind.
+Lexer-FSA models both representations in a single `State<T>` enum, using Swift's phantom-type mechanism to enforce that NFA-only operations (e.g., `epsClosure`) and DFA-only operations (e.g., `minimize`) are statically scoped to the correct automaton kind.
 
 ---
 
@@ -209,15 +212,17 @@ accept iff state ∈ F
 
 - Literals and escaped characters
 - `|` (alternation)
-- `*` (Kleene star), `+` (one-or-more)
+- `*` (Kleene star), `+` (one-or-more), `?` (optional)
+- `{n,}`, `{n,m}` (bounded repetition)
 - `(…)` grouping
 - `[…]` character classes with ranges
+- `.` (any character), `@` (any string), `<lo-hi>` (numerical interval), `#` (empty language) — each gated by its own `SyntaxOptions` flag
 
-The resulting `Expression` tree is shared by both construction backends.
+The resulting `Expression` tree is shared by all three construction backends below. `{n,}`, `{n,m}`, and `<lo-hi>` are not primitive in any of the three — each construction method expands them into the primitive forms (`union`, `concatenation`, `optional`, `repeat`, `char`, `string`, `empty`) using the same shared functions in `Expression+Desugar.swift`, so all three agree by construction on what e.g. `a{2,5}` means.
 
 ### 7.2 Thompson's Construction
 
-`RegexThompson` (selectable via `ConstructionMethod.thompson`) implements the classical McNaughton–Yamada–Thompson algorithm. It walks the `Expression` AST recursively and builds NFA fragments following the structural rules:
+`Thompson` (`Construction/Thompson.swift`, selectable via `ConstructionMethod.thompson`) implements the classical McNaughton–Yamada–Thompson algorithm. It walks the `Expression` AST recursively and builds NFA fragments following the structural rules:
 
 | Expression form | NFA fragment |
 |---|---|
@@ -232,17 +237,49 @@ This produces an ε-NFA with O(|expression|) states and transitions. The resulti
 
 ### 7.3 Berry-Sethi Construction
 
-`RegexBerrySehti` (selectable via `ConstructionMethod.berrySethi`) implements the Glushkov / Berry-Sethi position automaton:
+`BerrySethi` (`Construction/BerrySehti.swift`, selectable via `ConstructionMethod.berrySethi`) implements the Glushkov / Berry-Sethi position automaton:
 
-1. Annotate every leaf in the parse tree with a unique position number.
-2. Compute **first(e)** — positions that can begin a match.
-3. Compute **last(e)** — positions that can end a match.
-4. Compute **follow(p)** — positions that can follow position p.
-5. Build the NFA: states are positions; transitions are `(p, symbol(p), q)` for each q ∈ follow(p).
+1. Parse the *augmented* expression `r#` — the trailing `#` sentinel gets the highest leaf position, and is the only mechanism this method has for detecting acceptance (see 7.4 for why Antimirov needs no such trick).
+2. Build a positional tree, `RegexNode` (`Construction/RegexNode.swift`) — an immutable, indirect value enum (`empty` / `symbol(Character, id:)` / `concat` / `alternation` / `star`), one leaf per symbol occurrence, atomically with a `leafExpressions: [Int: Expression]` table recording what each leaf actually matches (needed because a single `RegexNode.symbol` can't carry a full character range or "any character" — `leafExpressions` is the authoritative lookup for matching; the `Character` `RegexNode.symbol` carries is cosmetic, used only for `description`/debug output).
+3. Compute **nullable**, **firstpos**, **lastpos**, and **followpos** together in one bottom-up O(n) pass (`computeAttributesAndFollowPos`). A textbook two-function formulation (`computeAttributes` + `computeFollowPos`) is also provided and kept as the test suite's reference oracle, but is O(n²) — it recomputes `computeAttributes` on every subtree at every level of `computeFollowPos`'s own recursion — so it is not on `construct()`'s hot path.
+4. Build the DFA directly from `followpos`: states are sets of leaf positions; a state is accepting iff it contains the sentinel's position.
 
-The resulting automaton is ε-free by construction, has exactly |expression| + 1 states (one per symbol occurrence plus an initial state), and is often smaller than the Thompson NFA after determinization.
+The resulting automaton is ε-free and deterministic by construction — no NFA, no powerset step, ever — with exactly |expression| + 1 leaf positions (one per symbol occurrence plus the sentinel).
 
-### 7.4 Epsilon Removal
+`RegexNode` deliberately has no `Opt`-equivalent case: `a?` is represented as `alternation(a, .empty)` (`a|ε`), which the existing `.alternation` rule already handles correctly with no extra case anywhere. It also has no dummy "never-matched" leaf for the empty string: `.string("")` maps directly to `RegexNode.empty` (nullable, `firstpos = lastpos = ∅`, no leaf consumed at all) rather than a placeholder character chosen not to collide with the real alphabet.
+
+### 7.4 Antimirov Partial-Derivative Construction
+
+`Antimirov` (`Construction/Antimirov.swift`, selectable via `ConstructionMethod.derivative`) implements Antimirov's (1995) partial-derivative automaton, then minimizes it.
+
+**Background.** Brzozowski (1964) defined the derivative of a regular expression `e` with respect to a symbol `c`, written `∂e/∂c`, as a single expression denoting "what `e` becomes after consuming one leading `c`". Used directly that way, the derivative of an alternation keeps re-folding results back through `|`, and telling whether two derivative expressions denote the same language again needs an ACI-equivalence check (associativity, commutativity, idempotence of `|`). Antimirov's refinement is to define the *partial* derivative, `pd(e, c)`, as a *set* of expressions instead: distribute the alternation across the set up front, and take the derivative of each disjunct on its own, rather than folding the results back into one expression. The set of all partial derivatives reachable from a fixed `e` is finite — bounded by the number of symbol occurrences in `e` — which gives a deterministic automaton directly: each state IS one `Set<Expression>`, and `Expression`'s synthesized `Hashable`/`Equatable` conformance (it is `indirect enum Expression: Hashable`, see `Expression.swift`) does the ACI bookkeeping for free, with no canonical form or extra equivalence check needed anywhere.
+
+**Nullable and partialDerivative** (`Construction/PartialDerivative.swift`) are pure functions over `Expression`:
+
+| Expression form | `nullable(e)` | `partialDerivative(e, c)` |
+|---|---|---|
+| `#` (empty language) | `false` | `∅` |
+| `ε` (`""`) | `true` | `∅` |
+| literal `a` | `false` | `{ε}` if `c == a`, else `∅` |
+| `[lo-hi]` | `false` | `{ε}` if `lo ≤ c ≤ hi`, else `∅` |
+| `.` (any char) | `false` | `{ε}` |
+| `s` (string) | `s.isEmpty` | `{tail(s)}` if `s` starts with `c`, else `∅` |
+| `e₁ \| e₂` | `nullable(e₁) ∨ nullable(e₂)` | `pd(e₁,c) ∪ pd(e₂,c)` |
+| `e₁ · e₂` | `nullable(e₁) ∧ nullable(e₂)` | `{t·e₂ \| t ∈ pd(e₁,c)} ∪ (pd(e₂,c)` if `nullable(e₁))` |
+| `e?` | `true` | `pd(e,c)` (≡ `e\|ε`, and `pd(ε,c) = ∅`) |
+| `e*` | `true` | `{t·e* \| t ∈ pd(e,c)}` — the *un-derived* `e*` is the continuation; this self-reference is the back-edge that makes the star loop |
+
+`repeatMin`/`repeatMinMax`/`interval`/`anyString` all defer to the same `Expression+Desugar.swift` expansion Berry-Sethi uses rather than re-deriving their own nullability/derivative rules — `nullable(e{n,m})` is `n == 0 ∨ nullable(e)`, not simply `n == 0`, which a hand-rolled rule can easily get wrong (e.g. `(a?){2,4}` is nullable for any `n`).
+
+`·` above is `smartConcat`, concatenation with the algebraic identities `0·e = e·0 = 0` and `ε·e = e·ε = e` applied eagerly, so derivative terms don't accumulate dead weight as they're threaded through repeated concatenation. By convention, a derivative that "goes nowhere" is the *absence* of a term from the returned set, never a literal `.empty` (the zero/empty-language expression) member — though `smartConcat` can still introduce one if the original pattern itself concatenates with `#` (e.g. `a#`); `Antimirov`'s construction loop filters any such dead terms back out before turning a result into a DFA state.
+
+**Construction loop**: starting from the singleton state `{ pattern }`, repeatedly compute `⋃ pd(t, c)` over every term `t` in the current state and every character `c` in the pattern's concrete alphabet (`concreteAlphabet(of:)`, the same printable-ASCII-for-any-char convention Berry-Sethi uses), adding a transition to whichever new term-set results, until no new states appear. A state is accepting iff it contains a `nullable` term.
+
+This is deterministic by construction for the same structural reason Berry-Sethi's is — there is no separate subset-construction step laid on top — but **no `#` sentinel is needed**: acceptance is decided directly by asking whether the current set of residual expressions contains one that can itself match ε. Concretely, `Antimirov.init` parses the pattern exactly as written, with nothing appended, so `Antimirov(...).expression` — and therefore `Regex(..., method: .derivative).description`, which unparses `builder.expression` — reflects the caller's pattern with no sentinel leaking into it. Contrast `Regex(..., method: .berrySethi).description`, which unparses the *augmented* `r#` and so always shows a trailing `#`.
+
+The partial-derivative automaton is deterministic but not necessarily *minimal*: two different term-sets can still denote the same residual language. `construct()` therefore runs the result through `brzozowskiMinimize` (§9.2) before returning, and tags it `minimal: true` — the only one of the three construction methods that returns a provably minimal DFA directly.
+
+### 7.5 Epsilon Removal
 
 `removeEps(initial:finals:transitions:)` on `Regex` applies Algorithm 1.5.2 from Skut et al. to eliminate ε-transitions from a Thompson NFA:
 
@@ -250,7 +287,7 @@ The resulting automaton is ε-free by construction, has exactly |expression| + 1
 2. Redirect the transition to each state in the closure.
 3. Any state whose ε-closure intersects F becomes a new final state.
 
-### 7.5 Determinization in Regex context
+### 7.6 Determinization in Regex context
 
 Setting `regex.isDeterministic = true` triggers the powerset construction via `powerset(initial:finals:transitions:)` in `RegexPowerset.swift`. The result replaces `self.state` with a `.dfa(...)` value.
 
@@ -262,7 +299,7 @@ Two implementations of the powerset construction exist:
 
 **Legacy (in `RegexPowerset.swift`)** — operates on plain `NfaTuple` and returns a `DfaTuple`, with no token map awareness. Used by the `Regex` type when `isDeterministic` is set.
 
-**Token-tracking (in `Determinize/Determinize.swift`)** — the newer implementation on `State<NondeterministicFiniteState>.determinize()`. It adds token map propagation:
+**Token-tracking (in `Determinize/Determinize.swift`)** — the newer implementation on `State<NFSA>.determinize()` (`NFSA` is the current name of what this document elsewhere calls the nondeterministic finite-state type). It adds token map propagation:
 
 ```
 dfaState s ← ε-closure({q₀})
@@ -279,30 +316,21 @@ for each NFA state set S not yet processed:
 
 The **priority resolution** picks the `TokenClass` with the lowest `priority` integer value among all accepting NFA states in the set — implementing the scanner convention that a keyword pattern (priority 1) beats a generic identifier pattern (priority 10) when both patterns match the same string.
 
-### Known issue in current implementation
+### Known issue in current implementation — RESOLVED
 
-`Determinize.swift` line 68–73 has a variable-shadowing bug:
-
-```swift
-let nextDfaState: Int           // shadows the outer `var nextDfaState`
-if let existing = dfaStates[nextClosure] {
-    nextDfaState = existing
-} else {
-    nextDfaState = nextDfaState  // ← reads the shadowed constant, not the counter
-    dfaStates[nextClosure] = nextDfaState
-    nextDfaState += 1            // ← compile error: cannot mutate a let
-    ...
-```
-
-This prevents the token-tracking determinizer from compiling. See §15 for the fix.
+This section previously described a variable-shadowing compile error in `Determinize.swift`'s subset-construction loop (a `let` accidentally shadowing the outer DFA-state-id counter `var`). The current source (confirmed while implementing §7.4/§9.2) uses distinct names — `nextId` for the counter, `targetDfaState` for the per-iteration lookup result — and has no such shadowing. See also §15.1, which describes the same historical issue.
 
 ---
 
 ## 9. DFA Minimization
 
-`Minimize/Minimize.swift` implements **Hopcroft's algorithm** extended with token-class awareness on `DeterministicFiniteState`.
+Two independent algorithms are available.
 
-### Standard Hopcroft's algorithm
+### 9.1 Hopcroft's Algorithm (token-class aware)
+
+`Minimize/Minimize.swift` implements **Hopcroft's algorithm** extended with token-class awareness on `DFSA`.
+
+#### Standard Hopcroft's algorithm
 
 The classical algorithm partitions Q into equivalence classes of indistinguishable states:
 
@@ -312,7 +340,7 @@ The classical algorithm partitions Q into equivalence classes of indistinguishab
 4. When the worklist is empty, each block is a single equivalence class.
 5. Build the minimized DFA using one representative per block.
 
-### Token-class extension
+#### Token-class extension
 
 States that accept *different* token classes must never be merged, even if they are otherwise indistinguishable. The implementation enforces this by creating a separate initial partition block for each distinct `TokenClass` rather than a single block for all of F:
 
@@ -325,9 +353,28 @@ Initial partitions:
   { accepting states without any token class }  — one block each
 ```
 
+A consequence worth calling out explicitly: an accepting state with **no** token class is placed in its *own* singleton block, not grouped with other untagged accepting states. Partition refinement can only ever split a block, never merge two different initial blocks back together — so two untagged accepting states that happen to be genuinely language-equivalent are *never* merged by this algorithm. This is the right behaviour for its primary use case (a multi-pattern lexer DFA, where every accepting state is really supposed to represent a distinct token), but it means `DFSA.minimize()` is not guaranteed to reach the *global* minimum for a plain, token-free regex match — only ever a partition refinement of it, which can have the same number of states or more, never fewer. See 9.2 for the algorithm that does guarantee the global minimum, and `AntimirovTests.swift`'s `antimirovStateCountNeverExceedsHopcroftMinimizedBerrySethi` for a test that exploits exactly this asymmetry as a (one-directional) cross-check.
+
+### 9.2 Brzozowski's Double-Reversal Algorithm
+
+`brzozowskiMinimize(initial:finals:transitions:)` (`Minimize/BrzozowskiMinimize.swift`) is a second, independent minimizer, used internally by the Antimirov construction (§7.4) and available standalone. For any initially-connected automaton A (every state reachable from `initial` — true of every automaton this package builds, since all three regex constructions grow their transition sets from a worklist seeded at their own initial state):
+
+```
+minimal(A) = determinize(reverse(determinize(reverse(A))))
+```
+
+Reversing an automaton flips every transition and swaps the roles of "initial" and "final": a fresh synthetic state becomes the new initial state with an ε-edge to every old final state, and the old initial state becomes the new (unique) final state (`reverseAutomaton`). Determinizing that reversed automaton with the ordinary subset construction does two things as a side effect of just being a subset construction:
+
+- it merges states that are indistinguishable looking *backward* from acceptance — exactly the condition for two states to be language-equivalent;
+- it discards states unreachable in the reversed automaton — exactly the states that could never reach an accepting state in the original ("dead" states).
+
+Doing this twice yields the unique minimal DFA, with no separate dead-state-trimming pass or explicit equivalence-class computation required. The implementation reuses the package's existing, already-tested subset construction (`NFSA.determinize()`, §8) for the "determinize" half rather than re-deriving it, and introduces no global mutable counter — the only fresh state id needed (the synthetic reversed-initial state) is computed locally from the automaton's own state set each time it's needed, the same instance-local-counter discipline `BerrySethi` and `Antimirov` both follow (§15.13 notes where the rest of the codebase still relies on `Counter.shared`).
+
+Unlike Hopcroft's algorithm above, this minimizer has no notion of token classes, so it always reaches the true Myhill-Nerode minimum for plain acceptance — which is exactly why `Antimirov.construct()` uses it and tags its result `minimal: true`.
+
 ### Known issue in current implementation
 
-`Minimize.swift` references `transition.range` (line 135, 162) instead of `transition.alphabetRange`. This is a typo that prevents the file from compiling. See §15.
+`Minimize.swift` previously referenced `transition.range` instead of `transition.alphabetRange` (a typo that would have prevented the file from compiling); the current source already uses `transition.alphabetRange` throughout. See §15 for the status of other entries in that catalogue, several of which predate this and other rounds of bug fixes and are similarly out of date.
 
 ---
 
@@ -446,36 +493,19 @@ These generators are primarily useful for randomized testing and benchmarking mi
 
 This section catalogues bugs, incomplete work, and design issues found during the audit, ordered from blocking to cosmetic.
 
-### 15.1 Shadowed counter variable in `Determinize.swift` (compile error)
+> **Note on currency**: this catalogue was assembled in one audit pass and has not been fully re-verified since. Several rounds of fixes have landed since some entries were written — 15.2 and 15.12 below are confirmed resolved in the current source as of the Antimirov implementation (§7.4) — but the remaining entries have not all been individually re-checked against the current code. Treat this section as a historical record to verify against the current source, not a guaranteed-current bug list.
 
-**Location**: `Determinize/Determinize.swift`, lines 67–74.
+### 15.1 ~~Shadowed counter variable in `Determinize.swift`~~ — RESOLVED
 
-Inside the worklist loop, `let nextDfaState: Int` introduces a constant that shadows the outer `var nextDfaState: Int = 0` counter. The `else` branch then reads the constant and tries to increment it, causing a compile error.
+**Location**: `Determinize/Determinize.swift`.
 
-**Fix**:
+This entry originally described `let nextDfaState: Int` shadowing an outer `var nextDfaState: Int = 0` counter, causing a compile error. The current source uses distinct names throughout (`nextId` for the counter, `targetDfaState` for the per-iteration result) — confirmed while implementing §7.4/§9.2 — and has no such shadowing. No action needed.
 
-```swift
-// Replace the shadowed block:
-let nextDfaStateId: Int
-if let existing = dfaStates[nextClosure] {
-    nextDfaStateId = existing
-} else {
-    nextDfaStateId = nextDfaState   // read counter
-    dfaStates[nextClosure] = nextDfaStateId
-    nextDfaState += 1               // increment outer var
-    workList.append(nextClosure)
-    // ... check for accepting state ...
-}
-dfaTransitions.insert(Transition(from: currentDfaState, AlphabetRange.char(symbol), to: nextDfaStateId))
-```
+### 15.2 ~~`transition.range` typo in `Minimize.swift`~~ — RESOLVED
 
-### 15.2 `transition.range` typo in `Minimize.swift` (compile error)
+**Location**: `Minimize/Minimize.swift`.
 
-**Location**: `Minimize/Minimize.swift`, lines 135 and 162.
-
-The stored property on `Transition` is `alphabetRange`, not `range`. Both sites pattern-match `.char(let c)` against `transition.range`, which does not exist.
-
-**Fix**: Replace `transition.range` with `transition.alphabetRange` on both lines.
+This entry originally described `.char(let c)` being pattern-matched against a nonexistent `transition.range` property instead of `transition.alphabetRange`, which would have prevented the file from compiling. The current source already uses `transition.alphabetRange` throughout (confirmed while implementing §7.4/§9.2) — no action needed.
 
 ### 15.3 `AlphabetEpsRange` duplicates `AlphabetRange`
 
@@ -582,26 +612,23 @@ return nextStates.first
 
 In a correctly constructed DFA there is at most one successor, so `.first` is safe. But during intermediate construction steps (e.g., before `invariant()` is called) there may be multiple transitions and the result is non-deterministic. A `precondition(nextStates.count <= 1)` or an assertion in debug builds would surface violations immediately.
 
-### 15.12 DFA `minimize()` is stubbed out on `State<T>` itself
+### 15.12 ~~DFA `minimize()` is stubbed out on `State<T>` itself~~ — RESOLVED
 
-**Location**: `State.swift`, `minimize()` method inside the `DeterministicFiniteState` extension.
+**Location**: `State.swift`, `minimize()` inside the `extension State where T == DFSA` block.
 
-```swift
-mutating func minimize() {
-    // commented out
-}
-```
-
-The actual minimization is in `Minimize.swift` on `DeterministicFiniteState` directly. The `State`-level stub should either delegate to that implementation or be removed to avoid confusion.
+This entry originally described `minimize()` as a commented-out stub at the `State<T>` level, separate from (and not delegating to) the real implementation in `Minimize.swift`. The current source's `State where T == DFSA` extension wraps the call site's `(initial, finals, transitions)` into a fresh `DFSA`, invokes the real Hopcroft minimization on it, and writes the result back to `self` — it is a working delegation, not a stub. `Automaton<Type>.minimize()` calls through to it the same way. No action needed.
 
 ### 15.13 Typos in identifiers and comments
 
-- File name: `FIniteStateProtocol.swift` — capital `I` in `FInite`.
+- File name: `FIniteStateProtocol.swift` — capital `I` in `FInite`. (Note: no file by this name exists in the current source tree; the FSA protocol now lives in `FSA.swift`. Re-verify before acting on this entry.)
 - Comment: `"autmaton"` (missing 'o') appears in several places.
-- `RegexBerrySehti.swift` — the algorithm name is Berry-Sethi; "Sehti" is a misspelling.
-- `ConstructionMethod.berrySethi` — inconsistently named `berrySethi` in code but `BerrySethi` in file names.
+- `BerrySehti.swift` (`Construction/BerrySehti.swift`) — the algorithm name is Berry-Sethi; "Sehti" is a misspelling.
+- `ConstructionMethod.berrySethi` — inconsistently named `berrySethi` in code but `BerrySethi`/`BerrySehti` in file and type names.
 - `generateOptions` → should be `GenerateOptions` consistently.
 
 ### 15.14 Transition table representation is O(|Δ|) per lookup
 
 All step functions iterate over `Set<Transition>` filtered by source state. For automata with hundreds of states and a large alphabet, this is O(|Δ|) per character. A nested dictionary `[Int: [Character: Int]]` (state → symbol → target) would reduce DFA simulation to O(1) amortized per character, at the cost of higher memory usage. A two-level array `[[Int]]` indexed by renumbered states and alphabet positions is the classic representation and would also improve cache locality.
+```
+
+A reminder on something I flagged earlier: §2.2 (the phantom-type table above), §5, §6, and §12 still say `NondeterministicFiniteState`/`DeterministicFiniteState` — those are the actual current names in *this* document's untouched sections, but the real types in the source are now `NFSA`/`DFSA` (as I corrected in §7–9 and in the README). I didn't touch those remaining sections since they're outside what the Antimirov task required — flagging again in case you want that cleaned up too.
