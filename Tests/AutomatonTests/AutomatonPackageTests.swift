@@ -1052,7 +1052,10 @@ struct EpsilonRemovalTests {
 // MARK: - 17. Automaton<Regex> Wrapper
 // ──────────────────────────────────────────────────────────────────────────────
 
-@Suite("Automaton Wrapper")
+#if false
+// Do not use Automaton any longer - Use Lexer and LexerBuilder only
+
+@Suite(.disabled("Automaton Wrapper"))
 struct AutomatonWrapperTests {
 
     @Test func wrapNFARegex() throws {
@@ -1102,7 +1105,9 @@ struct AutomatonWrapperTests {
 // MARK: - 18. DAWG / stringUnion
 // ──────────────────────────────────────────────────────────────────────────────
 
-@Suite("DAWG / String Union")
+// Do not use Automaton any longer - Use Lexer and LexerBuilder only
+
+@Suite(.disabled("DAWG / String Union"))
 struct DAWGTests {
 
     @Test func exactKeywordMatch() {
@@ -1152,6 +1157,7 @@ struct DAWGTests {
     }
 }
 
+#endif
 
 // ──────────────────────────────────────────────────────────────────────────────
 // MARK: - 19. Invariant Passes

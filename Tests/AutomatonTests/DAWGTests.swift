@@ -1,6 +1,10 @@
 import Testing
 @testable import LexerFSA
 
+#if false
+
+// Automaton has been removed - Use Lexer or LexerBuilder instead.
+
 @Test
 func testPascalSymbols() async throws {
     
@@ -26,3 +30,5 @@ func testPascalSymbols() async throws {
     #expect(automaton.run(string: "CHARACTER_STRINGS") == false)
     #expect(automaton.run(string: "CHARACTER_STRING") == true)
 }
+
+#endif

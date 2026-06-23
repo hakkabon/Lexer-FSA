@@ -64,43 +64,68 @@ public enum LexerError: Error, Equatable {
 /// `TokenClass` to the corresponding pattern, then dropping those tokens
 /// from the output stream of the parser.
 ///
-/// **Requirement**: the input `Automaton<DFSA>` must be deterministic.
-/// NFA-only automata cannot be lexed (the maximal-munch loop assumes
-/// `step(state:symbol:)` returns at most one successor). Use
-/// `automaton.determinize()` (on NFSA) or `regex.isDeterministic = true`
-/// before constructing the lexer.
+/// **Requirement**: the input `DFSA` must be deterministic. The
+/// `init(_ regex:)` convenience initializer handles this automatically:
+/// if the regex is still an ε-NFA (the form Thompson's construction
+/// produces), it is determinized in place before the lexer is built, so a
+/// freshly-parsed `Regex` is always safe to lex. For a hand-constructed
+/// `NFSA`, call `nfa.determinize()` first.
 public struct Lexer {
 
     /// The deterministic automaton this lexer drives.
-    public let dfa: Automaton<DFSA>
+    public let dfa: DFSA
+
+    /// Token-class names whose tokens should be dropped from the output of
+    /// `tokenize(_:skipping:)`. Populated by `LexerBuilder.build()` from the
+    /// rules registered via `addSkip` (or with `skipped: true`). Empty for a
+    /// lexer constructed directly from a `DFSA`/`Regex`, which preserves the
+    /// previous behaviour of emitting every token.
+    public let skippedTokenNames: Set<String>
 
     /// Creates a lexer over the given DFA. The DFA must already be
     /// deterministic; constructing a lexer over an NFA is a programmer
-    /// error and will trap at the first call to `nextToken`.
-    public init(_ dfa: Automaton<DFSA>) {
+    /// error and will trap at the first call to `nextToken`. No token
+    /// classes are skipped.
+    public init(_ dfa: DFSA) {
         self.dfa = dfa
+        self.skippedTokenNames = []
     }
 
-    /// Convenience initializer over an already-deterministic Regex.
-    /// Setting `regex.isDeterministic = true` before passing the regex
-    /// ensures the underlying state is `.dfa`. If the regex is still
-    /// non-deterministic, the lexer is still constructed but
-    /// `nextToken` will not be able to advance — every call will return
-    /// `.noMatch` or `.unexpectedCharacter`.
+    /// Internal initializer used by `LexerBuilder.build()` to record which
+    /// token-class names were registered as skip rules.
+    init(_ dfa: DFSA, skippedTokenNames: Set<String>) {
+        self.dfa = dfa
+        self.skippedTokenNames = skippedTokenNames
+    }
+
+    /// Convenience initializer over a `Regex`. The regex is determinized
+    /// automatically if it is still a Thompson ε-NFA (the form produced by
+    /// `Regex(_ pattern:)`), so a freshly-parsed regex is always safe to
+    /// lex. A regex that is already `.dfa` is wrapped as-is.
     public init(_ regex: Regex) {
+        self.skippedTokenNames = []
         switch regex.state {
-        case let .nfa(initial, finals, transitions, tokenMap):
-            // Non-deterministic regex; accept construction for
-            // diagnostics-friendly failure rather than trapping here.
-            self.dfa = Automaton<DFSA>(DFSA(
-                initial: initial, finals: finals,
-                transitions: transitions, minimal: false,
-                tokenMap: tokenMap))
-        case let .dfa(initial, finals, transitions, minimal, tokenMap):
-            self.dfa = Automaton<DFSA>(DFSA(
+        case .nfa:
+            // A Thompson regex is an ε-NFA. Determinize its underlying state
+            // (the token-aware powerset construction lives on `State`) so the
+            // lexer's maximal-munch loop can assume `step` returns at most
+            // one successor. This replaces the old behaviour, which mis-wrapped
+            // the NFA topology as `.dfa` and then `fatalError`'d at the first
+            // ε-transition.
+            var state = regex.state
+            state.determinize()
+            guard case let .dfa(initial, finals, transitions, minimal, tokenMap) = state else {
+                fatalError("State.determinize() did not produce a .dfa state")
+            }
+            self.dfa = DFSA(
                 initial: initial, finals: finals,
                 transitions: transitions, minimal: minimal,
-                tokenMap: tokenMap))
+                tokenMap: tokenMap)
+        case let .dfa(initial, finals, transitions, minimal, tokenMap):
+            self.dfa = DFSA(
+                initial: initial, finals: finals,
+                transitions: transitions, minimal: minimal,
+                tokenMap: tokenMap)
         }
     }
 
@@ -131,16 +156,35 @@ public struct Lexer {
     /// Scans the entire source into a token array, stopping at the first
     /// lexer error.
     ///
+    /// Tokens whose class name is in `skippedTokenNames` (the rules
+    /// registered via `LexerBuilder.addSkip` or with `skipped: true`) are
+    /// *consumed but dropped* — the scanner still advances past them, but
+    /// they do not appear in the returned array. For a lexer constructed
+    /// directly from a `DFSA`/`Regex`, `skippedTokenNames` is empty and
+    /// every token is emitted.
+    ///
     /// Useful for batch lexing where the source is known to be valid.
     /// For streaming use, call `nextToken(in:from:)` in a loop.
     public func tokenize(_ source: String) -> Result<[Token], LexerError> {
+        return tokenize(source, skipping: skippedTokenNames)
+    }
+
+    /// Scans the entire source into a token array, dropping any token whose
+    /// class name is in `skip`. This is the escape hatch for callers that
+    /// build a `Lexer` directly (not via `LexerBuilder`) but still want
+    /// whitespace/comment elision. Use an empty set to keep every token.
+    ///
+    /// Stops at the first lexer error.
+    public func tokenize(_ source: String, skipping skip: Set<String>) -> Result<[Token], LexerError> {
         var tokens: [Token] = []
         var offset = 0
         let total = source.unicodeScalars.count
         while offset < total {
             switch nextToken(in: source, from: offset) {
             case .success(let token):
-                tokens.append(token)
+                if !skip.contains(token.tokenClass.name) {
+                    tokens.append(token)
+                }
                 offset = token.endOffset
             case .failure(let err):
                 return .failure(err)

@@ -334,7 +334,7 @@ private func th(_ pattern: String, accepts s: String, flags: SyntaxOptions = .ba
 
 // MARK: - 13. Classic textbook example (Aho §3.9)
 
-@Test func classicAhoCatDotStarAbb() throws {
+@Test func classicAhoCatDotStarAbb2() throws {
     // (a|b)*abb — the textbook Berry-Sethi / position-DFA example.
     // The minimal DFA has 4 states.
     let pat = "(a|b)*abb"

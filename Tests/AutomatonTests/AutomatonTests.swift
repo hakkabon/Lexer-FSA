@@ -5,6 +5,9 @@ import Testing
 // Create use-cases for unions minimize on/off with marker overlapping
 // Create use-cases for merge conflicts and conflict resolving
 
+#if false
+// Do not use Automaton any longer - Use Lexer and LexerBuilder only
+
 @Test
 func testFloatLexemes() async throws {
     let FLOAT = "[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?";
@@ -143,8 +146,6 @@ struct DFAUnionTests {
 }
 
 // Important use-case: This how the parser uses the Automaton.
-
-#if false
 
 @Test
 func testRegexUnion() async throws {

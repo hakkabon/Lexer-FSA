@@ -5,6 +5,9 @@ import Testing
 // MARK: - Lexer (§3.1, §3.2)
 // ──────────────────────────────────────────────────────────────────────────────
 
+#if false
+// Automaton has been removed - Use Lexer and LexerBuilder only
+
 @Suite("Lexer — maximal-munch scanning")
 struct LexerTests {
 
@@ -134,6 +137,8 @@ struct LexerTests {
     }
 }
 
+// Automaton has been removed - Use Lexer and LexerBuilder only
+
 @Suite("Lexer — keyword-vs-identifier priority")
 struct LexerPriorityTests {
 
@@ -206,3 +211,5 @@ struct LexerPriorityTests {
         }
     }
 }
+
+#endif

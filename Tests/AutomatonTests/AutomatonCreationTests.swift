@@ -1,6 +1,10 @@
 import XCTest
 @testable import LexerFSA
 
+#if false
+
+// Automaton has been removed - Use Lexer and LexerBuilder only
+
 class AutomatonCreationTests: XCTestCase {
 
     func testEmptyNondeterministicFiniteState() throws {
@@ -53,3 +57,5 @@ class AutomatonCreationTests: XCTestCase {
 //        XCTAssertTrue(dfa.finiteState.recognize(string: "ababbababa"), "'(ab)*(ba)*' accepts `ababbababa`")
 //    }
 }
+
+#endif
