@@ -617,10 +617,10 @@ This entry originally described `minimize()` as a commented-out stub at the `Sta
 
 ### 15.13 Typos in identifiers and comments
 
-- ~~ File name: `FIniteStateProtocol.swift` — capital `I` in `FInite`. (Note: no file by this name exists in the current source tree; the FSA protocol now lives in `FSA.swift`. Re-verify before acting on this entry.) ~~ - RESOLVED
-- ~~ Comment: `"autmaton"` (missing 'o') appears in several places. ~~ - RESOLVED 
-- ~~ `BerrySehti.swift` (`Construction/BerrySehti.swift`) — the algorithm name is Berry-Sethi; "Sehti" is a misspelling. ~~ - RESOLVED 
-- ~~ `ConstructionMethod.berrySethi` — inconsistently named `berrySethi` in code but `BerrySethi`/`BerrySehti` in file and type names. ~~ - RESOLVED 
+- ~~File name: `FIniteStateProtocol.swift` — capital `I` in `FInite`. (Note: no file by this name exists in the current source tree; the FSA protocol now lives in `FSA.swift`. Re-verify before acting on this entry.)~~ - RESOLVED
+- ~~Comment: `"autmaton"` (missing 'o') appears in several places.~~ - RESOLVED 
+- ~~`BerrySehti.swift` (`Construction/BerrySehti.swift`) — the algorithm name is Berry-Sethi; "Sehti" is a misspelling.~~ - RESOLVED 
+- ~~`ConstructionMethod.berrySethi` — inconsistently named `berrySethi` in code but `BerrySethi`/`BerrySehti` in file and type names.~~ - RESOLVED 
 - ~~`generateOptions` → should be `GenerateOptions` consistently.~~ - RESOLVED
 
 ### 15.14 Transition table representation is O(|Δ|) per lookup
