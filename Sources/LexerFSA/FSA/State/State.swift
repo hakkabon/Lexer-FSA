@@ -78,16 +78,24 @@ public enum State<T> {
 }
 
 
-extension State {    
+extension State {
+
+    /// Common payload shared by both representations (`.nfa` and `.dfa`).
+    /// Most accessors below don't care about `.dfa`'s extra `minimal` flag,
+    /// so rather than re-switching on `self` in every one of them (as this
+    /// type used to), the shared fields are extracted here once.
+    private var fields: (initial: Int, finals: Set<Int>, transitions: Set<Transition>, tokenMap: [Int: TokenClass]) {
+        switch self {
+        case let .nfa(initial, finals, transitions, tokenMap):
+            return (initial, finals, transitions, tokenMap)
+        case let .dfa(initial, finals, transitions, _, tokenMap):
+            return (initial, finals, transitions, tokenMap)
+        }
+    }
 
     /// Returns true if the automaton accepts no string (no final states and no transitions).
     public var isEmpty: Bool {
-        switch self {
-        case let .nfa(_, finals, transitions, _):
-            return finals.isEmpty && transitions.isEmpty
-        case let .dfa(_, finals, transitions, _, _):
-            return finals.isEmpty && transitions.isEmpty
-        }
+        fields.finals.isEmpty && fields.transitions.isEmpty
     }
     
     /// Returns true if state of automaton is `deterministic`.
@@ -107,60 +115,25 @@ extension State {
     }
     
     /// Initial state of automaton.
-    public var initial: Int {
-        switch self {
-        case let .nfa(initial,_,_,_): return initial
-        case let .dfa(initial,_,_,_,_): return initial
-        }
-    }
+    public var initial: Int { fields.initial }
     
     /// Final states of automaton.
-    public var finals: Set<Int> {
-        switch self {
-        case let .nfa(_,finals,_,_): return finals
-        case let .dfa(_,finals,_,_,_): return finals
-        }
-    }
+    public var finals: Set<Int> { fields.finals }
     
     /// Number of states, not taking into account for non-relevant zombie states.
-    public var stateCount: Int {
-        switch self {
-        case let .nfa(_,_,transitions,_): return transitions.states().count
-        case let .dfa(_,_,transitions,_,_): return transitions.states().count
-        }
-    }
+    public var stateCount: Int { fields.transitions.states().count }
     
     /// Number of final states.
-    public var finalCount: Int {
-        switch self {
-        case let .nfa(_,finals,_,_): return finals.count
-        case let .dfa(_,finals,_,_,_): return finals.count
-        }
-    }
+    public var finalCount: Int { fields.finals.count }
     
     /// Returns alphabet defined on automaton.
-    public var alphabet: Alphabet {
-        switch self {
-        case let .nfa(_,_,transitions,_): return transitions.alphabet()
-        case let .dfa(_,_,transitions,_,_): return transitions.alphabet()
-        }
-    }
+    public var alphabet: Alphabet { fields.transitions.alphabet() }
     
     /// Returns true if given state is the `final` state of automaton.
-    public func isFinal(state: Int) -> Bool {
-        switch self {
-        case let .nfa(_,finals,_,_): return finals.contains(state)
-        case let .dfa(_,finals,_,_,_): return finals.contains(state)
-        }
-    }
+    public func isFinal(state: Int) -> Bool { fields.finals.contains(state) }
     
     /// Returns true if given state is the `initial` state of automaton.
-    public func isInitial(state: Int) -> Bool {
-        switch self {
-        case let .nfa(initial,_,_,_): return initial == state
-        case let .dfa(initial,_,_,_,_): return initial == state
-        }
-    }
+    public func isInitial(state: Int) -> Bool { fields.initial == state }
 
     // Helper: epsilon closure
     func epsilonClosure(_ states: Set<Int>, over transitions: Set<Transition>) -> Set<Int> {
@@ -182,12 +155,7 @@ extension State {
     }
     
     /// Get token class for a final state
-    public func tokenClass(for finalState: Int) -> TokenClass? {
-        switch self {
-        case let .nfa(_,_,_,tokenMap): return tokenMap[finalState]
-        case let .dfa(_,_,_,_,tokenMap): return tokenMap[finalState]
-        }
-    }
+    public func tokenClass(for finalState: Int) -> TokenClass? { fields.tokenMap[finalState] }
     
     /// Run automaton and return matched token class
     public func recognizeWithToken(string s: String) -> TokenClass? {
@@ -261,29 +229,16 @@ extension State {
     }
     
     public func reachableStates(from source: Int) -> Set<Int> {
-        switch self {
-        case .dfa(_, _, let transitions, _, _):
-            var visited = Set<Int>([source])
-            var queue = [source]
-            while !queue.isEmpty {
-                let current = queue.removeFirst()
-                for t in transitions where t.source == current {
-                    if visited.insert(t.target).inserted { queue.append(t.target) }
-                }
+        let transitions = fields.transitions
+        var visited = Set<Int>([source])
+        var queue = [source]
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            for t in transitions where t.source == current {
+                if visited.insert(t.target).inserted { queue.append(t.target) }
             }
-            return visited
-
-        case .nfa(_, _, let transitions, _):
-            var visited = Set<Int>([source])
-            var queue = [source]
-            while !queue.isEmpty {
-                let current = queue.removeFirst()
-                for t in transitions where t.source == current {
-                    if visited.insert(t.target).inserted { queue.append(t.target) }
-                }
-            }
-            return visited
         }
+        return visited
     }
 }
 
@@ -292,33 +247,18 @@ extension State: CustomStringConvertible {
 
     /// Print internal representation. States are not re-numbered.
     public var description: String {
-        switch self {
-        case let .nfa(initial,finals,transitions,_):
-            let states = transitions.states()
-            
-            var s: String = ""
-            s.append( "states \(states.count) initial state: \(initial)\n" )
-            s.append( "\(setNotation(states))\n" )
-            s.append( "accept states: \(setNotation(finals))\n" )
-            s.append( "transitions: \(transitions.count)\n" )
-            for t in transitions {
-                s.append( ("\(t)\n") )
-            }
-            return s
+        let (initial, finals, transitions) = (fields.initial, fields.finals, fields.transitions)
+        let states = transitions.states()
 
-        case let .dfa(initial,finals,transitions,_,_):
-            let states = transitions.states()
-            
-            var s: String = ""
-            s.append( "states \(states.count) initial state: \(initial)\n" )
-            s.append( "\(setNotation(states))\n" )
-            s.append( "accept states: \(setNotation(finals))\n" )
-            s.append( "transitions: \(transitions.count)\n" )
-            for t in transitions {
-                s.append( ("\(t)\n") )
-            }
-            return s
+        var s: String = ""
+        s.append( "states \(states.count) initial state: \(initial)\n" )
+        s.append( "\(setNotation(states))\n" )
+        s.append( "accept states: \(setNotation(finals))\n" )
+        s.append( "transitions: \(transitions.count)\n" )
+        for t in transitions {
+            s.append( ("\(t)\n") )
         }
+        return s
     }
 }
 

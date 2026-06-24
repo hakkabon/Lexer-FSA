@@ -1,27 +1,29 @@
 //
 //  LexerDesignTests.swift
-//  AutomatonTests
+//  LexerFSATests
 //
 //  Tests written to cover the design issues surfaced in the codebase review.
 //
 //  They are organised in three groups:
 //
-//    A. Lexer entry-point ergonomics — documents the gap between the
-//       documented `Lexer(_ regex:)` convenience init and reality, and
-//       specifies the behaviour a first-class `Lexer(rules:)` builder
-//       should provide.
+//    A. Lexer entry-point ergonomics — pins the contract that `Lexer(_
+//       regex:)` must gracefully handle a fresh (non-deterministic) `Regex`,
+//       and that `Regex.isDeterministic = true` performs a real
+//       determinization rather than just flipping a label. Both were once
+//       bugs (the init mis-wrapped a fresh ε-NFA as `.dfa` and trapped on
+//       the first ε-transition; the setter didn't call `determinize()` at
+//       all) — both are fixed in `Lexer.swift`/`Regex.swift`, so these tests
+//       are enabled rather than `.disabled`.
 //
-//    B. The end-to-end lexer pipeline that the library is meant to
-//       support ([Regex]×N -> union -> determinize -> Lexer). These pass
-//       today *if* you hand-assemble the pipeline; they pin that contract.
+//    B. The end-to-end lexer pipeline that the library is meant to support
+//       ([Regex]×N -> union -> determinize -> minimize -> Lexer). This is
+//       now `LexerBuilder`'s job; `makeLexer` below is a thin wrapper around
+//       it so these tests double as `LexerBuilder` integration tests.
 //
 //    C. Duplication/abstraction contracts — properties that any
 //       de-duplicated `move`/`step`/`epsClosure`/`run` implementation
 //       must keep holding for both NFA and DFA, plus the reproducibility
-//       of construction that the recent Counter work claims.
-//
-//  Tests marked ".record on the broken path" fail today and are the
-//  specification for the fixes; the rest pass on the current tree.
+//       of construction that the local-counter union relies on.
 //
 
 import Testing
@@ -47,19 +49,14 @@ struct LexerEntryPointTests {
 
     /// The README "Quick Start" implies `Regex` is the starting point for
     /// lexing. The documented `Lexer(_ regex:)` convenience initializer
-    /// promises (Lexer.swift:88-89) that passing a still-non-deterministic
-    /// regex yields graceful `.noMatch` / `.unexpectedCharacter` failures.
+    /// promises (Lexer.swift) that passing a still-non-deterministic regex
+    /// yields a working lexer rather than crashing.
     ///
-    /// SPEC: it must not crash. A Thompson regex is an ε-NFA; today the init
-    /// mis-wraps it as `.dfa` and the DFA `step` `fatalError`s on the first
-    /// ε-transition (State.swift:587).
-    ///
-    /// This test is DISABLED because the current code traps (Swift cannot
-    /// catch `fatalError`, so the crash would abort the whole test process).
-    /// It is kept — not deleted — as the executable specification for the fix:
-    /// once `Lexer(_ regex:)` either auto-determinizes or returns a graceful
-    /// `.noMatch`, remove `.disabled`.
-    @Test(.disabled("BUG: Lexer(_ regex:) over a fresh NFA traps at State.swift:587"))
+    /// SPEC: it must not crash. A Thompson regex is an ε-NFA; `Lexer.init(_
+    /// regex:)` now determinizes it in place before wrapping it as a `DFSA`,
+    /// rather than mis-wrapping the raw NFA topology as `.dfa` (which used
+    /// to `fatalError` on the first ε-transition).
+    @Test
     func lexerOverFreshRegexMustNotTrap() throws {
         let re = try Regex("[a-z]+")
         #expect(!re.isDeterministic, "precondition: a fresh Regex is an NFA")
@@ -77,11 +74,10 @@ struct LexerEntryPointTests {
     }
 
     /// A `Lexer` built from an explicitly-determinized regex must scan
-    /// correctly. Setting `Regex.isDeterministic = true` should be a promise
-    /// that the underlying state is genuinely deterministic. Today the flag
-    /// is just a label — the state stays a Thompson ε-NFA, so the Lexer still
-    /// traps. Disabled for the same reason as the test above.
-    @Test(.disabled("BUG: Regex.isDeterministic is a label, not a real determinization"))
+    /// correctly. Setting `Regex.isDeterministic = true` is a promise that
+    /// the underlying state is genuinely deterministic — the setter now
+    /// calls `state.determinize()` rather than just flipping a label.
+    @Test
     func lexerOverDeterminizedRegexScans() throws {
         var re = try Regex("[a-z]+")
         re.isDeterministic = true
@@ -98,32 +94,16 @@ struct LexerEntryPointTests {
 // MARK: - B. End-to-end pipeline ([Regex]×N -> union -> determinize -> Lexer)
 // ──────────────────────────────────────────────────────────────────────────────
 
-#if false
-
-/// Helper: the pipeline a parser frontend actually wants. This is what
-/// `Lexer(rules:)` should encapsulate. Kept here so the contract is pinned
-/// regardless of where the convenience builder eventually lives.
-private func makeLexer(rules: [(String, TokenClass, Regex)]) -> Lexer {
-    let nfas: [Automaton<NFSA>] = rules.map { (_, tok, re) in
-        guard case let .nfa(initial, finals, transitions, _) = re.state else {
-            fatalError("Regex must still be in NFA form for union")
-        }
-        // Tag every final state of this component with the token class.
-        let tokenMap = Dictionary(uniqueKeysWithValues: finals.map { ($0, tok) })
-        return Automaton<NFSA>(
-            initial: initial, finals: finals,
-            transitions: transitions, tokenMap: tokenMap)
+/// Helper: the pipeline a parser frontend actually wants, now provided
+/// directly by `LexerBuilder`. Kept as a thin wrapper so the call sites
+/// below read the same as before, while actually exercising the public
+/// `LexerBuilder` API rather than re-implementing its internals by hand.
+private func makeLexer(rules: [(String, TokenClass, Regex)]) throws -> Lexer {
+    var builder = LexerBuilder()
+    for (_, tok, re) in rules {
+        builder.addRule(regex: re, token: tok)
     }
-
-    var united = Automaton<NFSA>.union(list: nfas)
-    united.determinize()
-
-    guard case let .dfa(i, f, t, minimal, tm) = united.state else {
-        fatalError("determinize() did not produce a .dfa state")
-    }
-    return Lexer(Automaton<DFSA>(DFSA(
-        initial: i, finals: f, transitions: t,
-        minimal: minimal, tokenMap: tm)))
+    return try builder.build()
 }
 
 @Suite("Lexer end-to-end pipeline (regex -> union -> determinize -> scan)")
@@ -238,7 +218,7 @@ struct MoveStepParityTests {
         //   0 -ε-> 1 (loop head)
         //   1 -a/b-> 1
         //   0 -ε-> 2 (accept, for the empty string)
-        let nfa = Automaton<NFSA>(
+        let nfa = NFSA(
             initial: 0,
             finals: [1, 2],
             transitions: [
@@ -260,7 +240,7 @@ struct MoveStepParityTests {
     /// deterministic automaton.
     @Test
     func determinizePreservesLanguage() {
-        let nfa = Automaton<NFSA>(
+        let nfa = NFSA(
             initial: 0,
             finals: [2],
             transitions: [
@@ -284,7 +264,7 @@ struct MoveStepParityTests {
     /// automaton (a second `determinize()` is a no-op).
     @Test
     func determinizeIsIdempotentOnDfa() {
-        let nfa = Automaton<NFSA>(
+        let nfa = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, .range("0","9"), to: 1)])
 
@@ -308,15 +288,15 @@ struct ConstructionReproducibilityTests {
     /// that SHOULD hold: equal languages => equal normalized transition sets.
     @Test
     func unionProducesEqualTransitionSetsAcrossCalls() {
-        let a = Automaton<NFSA>(
+        let a = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, .char("a"), to: 1)])
-        let b = Automaton<NFSA>(
+        let b = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, .char("b"), to: 1)])
 
-        let u1 = Automaton<NFSA>.union(a: a, b: b)
-        let u2 = Automaton<NFSA>.union(a: a, b: b)
+        let u1 = NFSA.union(a, b)
+        let u2 = NFSA.union(a, b)
 
         // The same language — same finals, same initial, same transitions.
         guard case let .nfa(i1, f1, t1, _) = u1.state,
@@ -375,7 +355,7 @@ struct LexerCriticalEdgeCases {
     /// the historical bug where `isSuccessor` only synthesized `.char`.
     @Test
     func rangeTransitionMatchesInteriorCharacters() {
-        let dfa = Automaton<DFSA>(
+        let dfa = DFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, .range("a", "z"), to: 1)],
             minimal: false)
@@ -396,7 +376,7 @@ struct LexerCriticalEdgeCases {
         // Language: "a" (accept) or "ab" (accept). Input "abc" must yield
         // token "ab" (the longest prefix that landed on an accept), and the
         // 'c' is then an error on the NEXT nextToken call.
-        let dfa = Automaton<DFSA>(
+        let dfa = DFSA(
             initial: 0, finals: [1, 2],
             transitions: [
                 Transition(from: 0, .char("a"), to: 1),  // "a"  -> accept
@@ -418,5 +398,3 @@ struct LexerCriticalEdgeCases {
         }
     }
 }
-
-#endif

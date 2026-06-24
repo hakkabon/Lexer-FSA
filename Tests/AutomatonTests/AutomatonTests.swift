@@ -1,25 +1,12 @@
 import Testing
 @testable import LexerFSA
 
-
-// Create use-cases for unions minimize on/off with marker overlapping
-// Create use-cases for merge conflicts and conflict resolving
-
-#if false
-// Do not use Automaton any longer - Use Lexer and LexerBuilder only
-
-@Test
-func testFloatLexemes() async throws {
-    let FLOAT = "[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?";
-    var automaton = Automaton(try Regex(FLOAT))
-    
-    // minimizing is optional
-//    automaton.minimize()
-    
-    #expect(automaton.recognize(string: "123456"), "valid lexeme '123456'")
-    #expect(automaton.recognize(string: "123.45"), "valid lexeme '123.45'")
-    #expect(automaton.recognize(string: "-0.123e-6"), "valid lexeme '-0.123e-6'")
-}
+// NFA/DFA union with token-class tracking, and the realistic "parser
+// front-end" use case those operations exist for. Originally written
+// against the `Automaton<Type>` container, which has since been removed —
+// `NFSA`/`DFSA` are used directly (NFSA.union/DFSA.union mirror the old
+// Automaton<Type>.union API), and the parser-facing use case at the bottom
+// is now demonstrated via `LexerBuilder` rather than `Automaton<Regex>`.
 
 // ──────────────────────────────────────────────────────────────────────────────
 // MARK: - NFA Union with Token Tracking (§3.3)
@@ -35,17 +22,17 @@ struct NFAUnionTests {
         let tokB = TokenClass(id: 2, name: "B", priority: 1)
 
         // "a"
-        let a = Automaton<NFSA>(
+        let a = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)],
             tokenMap: [1: tokA])
         // "b"
-        let b = Automaton<NFSA>(
+        let b = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("b"), to: 1)],
             tokenMap: [1: tokB])
 
-        let u = Automaton<NFSA>.union(a: a, b: b)
+        let u = NFSA.union(a, b)
 
         #expect(u.run(string: "a") == true)
         #expect(u.run(string: "b") == true)
@@ -62,7 +49,7 @@ struct NFAUnionTests {
         let ident = TokenClass(id: 2, name: "IDENT", priority: 10)
 
         // NFA for "if"
-        let ifNfa = Automaton<NFSA>(
+        let ifNfa = NFSA(
             initial: 0, finals: [2],
             transitions: [
                 Transition(from: 0, AlphabetRange.char("i"), to: 1),
@@ -70,7 +57,7 @@ struct NFAUnionTests {
             ],
             tokenMap: [2: kw])
         // NFA for [a-z]+  (just "a"-"z" then a self-loop on the final)
-        let identNfa = Automaton<NFSA>(
+        let identNfa = NFSA(
             initial: 0, finals: [1],
             transitions: [
                 Transition(from: 0, AlphabetRange.range("a","z"), to: 1),
@@ -78,7 +65,7 @@ struct NFAUnionTests {
             ],
             tokenMap: [1: ident])
 
-        let u = Automaton<NFSA>.union(list: [ifNfa, identNfa])
+        let u = NFSA.union([ifNfa, identNfa])
 
         // Both patterns accept; "if" is ambiguous and the lower-priority
         // (priority=1) keyword should win after determinization. Here we
@@ -99,15 +86,15 @@ struct NFAUnionTests {
         // Building the same union twice must produce identical state-id
         // assignments, since the union now uses a local counter rather
         // than the global Counter.shared singleton.
-        let a = Automaton<NFSA>(
+        let a = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)])
-        let b = Automaton<NFSA>(
+        let b = NFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("b"), to: 1)])
 
-        let u1 = Automaton<NFSA>.union(a: a, b: b)
-        let u2 = Automaton<NFSA>.union(a: a, b: b)
+        let u1 = NFSA.union(a, b)
+        let u2 = NFSA.union(a, b)
         #expect(u1.description == u2.description)
     }
 }
@@ -123,16 +110,16 @@ struct DFAUnionTests {
         let tokA = TokenClass(id: 1, name: "A", priority: 1)
         let tokB = TokenClass(id: 2, name: "B", priority: 1)
 
-        let a = Automaton<DFSA>(
+        let a = DFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("a"), to: 1)],
             minimal: false, tokenMap: [1: tokA])
-        let b = Automaton<DFSA>(
+        let b = DFSA(
             initial: 0, finals: [1],
             transitions: [Transition(from: 0, AlphabetRange.char("b"), to: 1)],
             minimal: false, tokenMap: [1: tokB])
 
-        let u = Automaton<DFSA>.union(a: a, b: b)
+        let u = DFSA.union(a, b)
 
         #expect(u.run(string: "a") == true)
         #expect(u.run(string: "b") == true)
@@ -145,36 +132,46 @@ struct DFAUnionTests {
     }
 }
 
-// Important use-case: This how the parser uses the Automaton.
+// ──────────────────────────────────────────────────────────────────────────────
+// MARK: - The Realistic Parser-Frontend Use Case
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// This is how a parser actually assembles a multi-pattern lexer: register
+// each token's pattern with a `LexerBuilder`, then `build()` once. The old
+// version of this test built the equivalent by hand with
+// `Automaton<Regex>` and explicitly called out, in a trailing comment, that
+// there was no way to identify *which* pattern matched without "fancy
+// book-keeping over the final states" — that gap is exactly what
+// `TokenClass`/`recognizeWithToken` below close.
 
 @Test
 func testRegexUnion() async throws {
-    // Define token classes for the automaton.
+    let stringTok = TokenClass(id: 1, name: "STRING", priority: 10)
+    let numTok    = TokenClass(id: 2, name: "NUM",    priority: 10)
+    let floatTok  = TokenClass(id: 3, name: "FLOAT",  priority: 5)
+
     let STRING = "[a-zA-Z]+"
     let NUM = "[+-]?([0-9])+"
-    let FLOAT = "[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?";
-    
-    var list: [Automaton<Regex>] = []
-    // Adding tags per regex not possible, ie. .mark(1) .mark(2) .mark(3).
-    list.append( Automaton(try Regex(STRING)) )
-    list.append( Automaton(try Regex(NUM)) )
-    list.append( Automaton(try Regex(FLOAT)) )
-    let automaton = Automaton.union(list: list)
+    let FLOAT = "[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?"
 
-    // Determinize is optional.
-    automaton.isDeterminized = true
+    var builder = LexerBuilder()
+    builder.addRule(pattern: STRING, token: stringTok)
+    builder.addRule(pattern: NUM, token: numTok)
+    builder.addRule(pattern: FLOAT, token: floatTok)
+    let lexer = try builder.build()
 
-    // Minimizing is optional.
-    automaton.minimize()
+    #expect(lexer.dfa.run(string: "abba"), "valid lexeme 'abba'")
+    #expect(lexer.dfa.run(string: "123456"), "valid lexeme '123456'")
+    #expect(lexer.dfa.run(string: "123.45"), "valid lexeme '123.45'")
+    #expect(lexer.dfa.run(string: "-0.123e-6"), "valid lexeme '-0.123e-6'")
 
-    // This executes as expected.
-    #expect(automaton.recognize(string: "abba"), "valid lexeme 'abba'");
-    #expect(automaton.recognize(string: "123456"), "valid lexeme '123456'");
-    #expect(automaton.recognize(string: "123.45"), "valid lexeme '123.45'");
-    #expect(automaton.recognize(string: "-0.123e-6"), "valid lexeme '-0.123e-6'");
-    
-    // But how-to identify the token class recognized without doing some fancy
-    // book-keeping over the final states in the Finite State Automaton.
+    // Unambiguous lexemes resolve to their expected token class with no
+    // extra bookkeeping required from the caller.
+    #expect(lexer.dfa.recognizeWithToken(string: "abba") == stringTok)
+    #expect(lexer.dfa.recognizeWithToken(string: "123.45") == floatTok)
+    #expect(lexer.dfa.recognizeWithToken(string: "-0.123e-6") == floatTok)
+    // "123456" is ambiguous between NUM and FLOAT (FLOAT's fractional and
+    // exponent parts are both optional); FLOAT's lower priority integer
+    // wins the determinizer's conflict resolution.
+    #expect(lexer.dfa.recognizeWithToken(string: "123456") == floatTok)
 }
-
-#endif

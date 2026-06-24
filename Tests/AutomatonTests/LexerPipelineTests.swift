@@ -3,16 +3,23 @@
 // lexer pipeline: several regular languages, each tagged with its own
 // TokenClass, merged into one NFA, determinized, and queried.
 //
-// `Automaton<Type>.union(list:)` is a non-functional stub (see write-up),
-// and `Regex` never threads a token map through its construction, so this
-// suite builds the union manually — with deliberately disjoint, hand-picked
-// state numbers (not `Counter.shared`) — to demonstrate the underlying FSA
-// primitives correctly support the workflow the package is meant for, even
-// though no public API currently assembles it for you.
-//
 // Coverage areas:
 //  1. Three-pattern union (KEYWORD / IDENTIFIER / NUMBER) — priority resolution
-//  2. The missing "scan a longer buffer into a token stream" capability
+//  2. Splitting a buffer into multiple adjacent tokens, via `LexerBuilder` +
+//     `Lexer.tokenize`
+//
+// `LexerPipelineTests` below builds its merged automaton by hand, with
+// deliberately disjoint, hand-picked state numbers (not relying on the
+// `LexerBuilder` pipeline), specifically so it exercises the underlying
+// `State<NFSA>.recognizeWithToken` primitive in isolation from any
+// higher-level construction path. That primitive does whole-string
+// recognition only — it cannot, by itself, split a buffer like "if123"
+// into the two tokens "if" and "123" (see
+// `wholeStringRecognitionCannotSplitTwoAdjacentTokens` below). That is
+// exactly the gap `LexerBuilder`/`Lexer` close: `LexerBuilderTokenizeTests`
+// further down builds the *same* three-pattern grammar via the public
+// `LexerBuilder` API and shows `Lexer.tokenize` correctly splitting
+// "if123" into `["if", "123"]` via maximal-munch scanning.
 
 import Testing
 @testable import LexerFSA
@@ -82,14 +89,14 @@ struct LexerPipelineTests {
         #expect(state.recognizeWithToken(string: "12a") == nil)
     }
 
-    /// This is the concrete demonstration of the gap described in the
-    /// write-up (§G): `recognizeWithToken` can only classify a string that
-    /// matches ONE compiled pattern *in its entirety*. A real lexer scanning
-    /// a source buffer needs to split "if123" into the two tokens `if` and
-    /// `123` via repeated longest-match-from-current-position; there is no
-    /// API in this package that does that — the merged automaton correctly
-    /// rejects the whole string instead, because no single pattern matches
-    /// "if123" end to end.
+    /// `recognizeWithToken` classifies a string that matches ONE compiled
+    /// pattern *in its entirety* — it has no notion of scanning forward and
+    /// splitting off a prefix. A merged automaton correctly rejects "if123"
+    /// as a whole, because no single pattern matches it end to end. Pinning
+    /// this behaviour matters because it's precisely the limitation
+    /// `Lexer.tokenize` (exercised below) is built to work around, by
+    /// repeatedly applying maximal-munch from the current offset instead of
+    /// matching the whole buffer at once.
     @Test func wholeStringRecognitionCannotSplitTwoAdjacentTokens() {
         let state = buildMergedLexerState()
         #expect(state.recognizeWithToken(string: "if123") == nil)
@@ -97,33 +104,59 @@ struct LexerPipelineTests {
     }
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
-// MARK: - Ready to enable once `Automaton.union(list:)` and `Regex` token
-//          threading are fixed (mirrors the existing #if false convention
-//          in AutomatonTests.swift's `testRegexUnion`).
+// MARK: - The same grammar, assembled via the public LexerBuilder API,
+//          splitting a buffer into multiple tokens.
 // ──────────────────────────────────────────────────────────────────────────────
 
-#if false
+@Suite("LexerBuilder assembles the same grammar and tokenizes a buffer")
+struct LexerBuilderTokenizeTests {
 
-@Test
-func testRegexUnionWithTokenClasses() async throws {
-    let identTok = TokenClass(id: 1, name: "IDENTIFIER", priority: 10)
-    let numTok   = TokenClass(id: 2, name: "NUMBER",     priority: 5)
+    private func makeKeywordIdentNumberLexer() throws -> Lexer {
+        var builder = LexerBuilder()
+        builder.addRule(pattern: "if", token: TokenClass(id: 1, name: "KEYWORD", priority: 1))
+        builder.addRule(pattern: "[a-z]+", token: TokenClass(id: 2, name: "IDENTIFIER", priority: 10))
+        builder.addRule(pattern: "[0-9]+", token: TokenClass(id: 3, name: "NUMBER", priority: 5))
+        return try builder.build()
+    }
 
-    var identifier = try Regex("[a-zA-Z]+")
-    var num        = try Regex("[0-9]+")
-    // Intended API: tag each compiled pattern with its token class before
-    // unioning, and have the union/determinize pipeline propagate it.
-    identifier.state.setTokenMap([identifier.state.finals.first!: identTok])
-    num.state.setTokenMap([num.state.finals.first!: numTok])
+    @Test func unionWithTokenClassesResolvesWholeStringMatches() throws {
+        let lexer = try makeKeywordIdentNumberLexer()
+        #expect(lexer.dfa.recognizeWithToken(string: "abba")?.name == "IDENTIFIER")
+        #expect(lexer.dfa.recognizeWithToken(string: "123")?.name == "NUMBER")
+    }
 
-    var automaton = Automaton.union(list: [Automaton(identifier), Automaton(num)])
-    automaton.isDeterministic = true
-    automaton.minimize()
+    /// This is the resolution of the gap pinned by
+    /// `wholeStringRecognitionCannotSplitTwoAdjacentTokens` above:
+    /// `Lexer.tokenize` performs repeated maximal-munch scans, so "if123"
+    /// splits into the keyword "if" followed by the number "123" — exactly
+    /// the buffer-scanning capability that whole-string `recognizeWithToken`
+    /// cannot provide on its own.
+    @Test func tokenizeSplitsAdjacentTokens() throws {
+        let lexer = try makeKeywordIdentNumberLexer()
+        guard case .success(let toks) = lexer.tokenize("if123") else {
+            Issue.record("expected tokenize(\"if123\") to succeed")
+            return
+        }
+        #expect(toks.map { $0.tokenClass.name } == ["KEYWORD", "NUMBER"])
+        #expect(toks.map { String($0.lexeme) } == ["if", "123"])
+    }
 
-    #expect(automaton.state.recognizeWithToken(string: "abba") == identTok)
-    #expect(automaton.state.recognizeWithToken(string: "123") == numTok)
+    @Test func tokenizeDistinguishesKeywordFromLongerIdentifier() throws {
+        // tokenize(_:) fails the *entire* call on the first unmatched
+        // character, so a space between "if" and "iffy" needs an explicit
+        // skip rule rather than being left to interrupt the scan.
+        var builder = LexerBuilder()
+        builder.addRule(pattern: "if", token: TokenClass(id: 1, name: "KEYWORD", priority: 1))
+        builder.addRule(pattern: "[a-z]+", token: TokenClass(id: 2, name: "IDENTIFIER", priority: 10))
+        builder.addSkip(" ")
+        let lexer = try builder.build()
+
+        guard case .success(let toks) = lexer.tokenize("if iffy") else {
+            Issue.record("expected tokenize(\"if iffy\") to succeed")
+            return
+        }
+        #expect(toks.map { $0.tokenClass.name } == ["KEYWORD", "IDENTIFIER"])
+        #expect(toks.map { String($0.lexeme) } == ["if", "iffy"])
+    }
 }
-
-#endif

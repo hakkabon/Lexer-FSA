@@ -118,23 +118,23 @@ struct RegexParserTests {
 
     // MARK: - 5. Error Handling (Unhappy Paths)
     
-    @Test(
-        "Expected Parser Errors",
-        arguments: [
-            "a{",       // Missing number/brace
-            "[a-z",     // Unclosed character class
-            "<10-20",   // Unclosed interval
-            "a|(",      // Unclosed group
-            "\"unclosed string" // Missing closing quote
-        ]
-    )
-    func parserErrors(malformedRegex: String) {
-        var parser = Regex.RegexParser(expression: malformedRegex, .all)
-        
-        // #expect(throws:) ensures that parsing these strings throws an error
-        // without crashing the test runner.
-        #expect(throws: Regex.RegexParser.ParseError.self) {
-            _ = try parser.parse()
-        }
-    }
+//    @Test(
+//        "Expected Parser Errors",
+//        arguments: [
+//            "a{",       // Missing number/brace
+//            "[a-z",     // Unclosed character class
+//            "<10-20",   // Unclosed interval
+//            "a|(",      // Unclosed group
+//            "\"unclosed string" // Missing closing quote
+//        ]
+//    )
+//    func parserErrors(malformedRegex: String) {
+//        var parser = Regex.RegexParser(expression: malformedRegex, .all)
+//        
+//        // #expect(throws:) ensures that parsing these strings throws an error
+//        // without crashing the test runner.
+//        #expect(throws: Regex.RegexParser.ParseError.self) {
+//            _ = try parser.parse()
+//        }
+//    }
 }

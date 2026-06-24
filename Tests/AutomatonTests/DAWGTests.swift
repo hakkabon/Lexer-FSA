@@ -1,13 +1,14 @@
 import Testing
 @testable import LexerFSA
 
-#if false
-
-// Automaton has been removed - Use Lexer or LexerBuilder instead.
+// DAWG / trie-based string-union construction. `Automaton.stringUnion(words:)`
+// (the former `Automaton<Type>` container) has been replaced by
+// `DFSA.stringUnion(words:)` — the trie/DAWG construction now lives directly
+// on the concrete deterministic automaton type.
 
 @Test
 func testPascalSymbols() async throws {
-    
+
     let symbols = [
         "for", "downto", "file", "<=", "<>", "CHARACTER_STRING", "packed",
         "function", "forward", "REALNUMBER", "program", "IDENTIFIER",
@@ -18,7 +19,7 @@ func testPascalSymbols() async throws {
         "label", "else", "begin", "until", "to", "div", "const", "otherwise",
         "not", "mod", "..", "then", "if", "->", ":=", "end", "in"
     ]
-    let automaton = Automaton.stringUnion(words: symbols)
+    let automaton = DFSA.stringUnion(words: symbols)
 
     #expect(automaton.run(string: "123456") == false)
     #expect(automaton.run(string: "<") == true)
@@ -30,5 +31,3 @@ func testPascalSymbols() async throws {
     #expect(automaton.run(string: "CHARACTER_STRINGS") == false)
     #expect(automaton.run(string: "CHARACTER_STRING") == true)
 }
-
-#endif

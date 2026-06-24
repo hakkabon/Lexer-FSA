@@ -19,12 +19,11 @@
 //  14. Regex compilation — Berry-Sethi
 //  15. Regex determinization via isDeterministic flag
 //  16. Regex epsilon removal
-//  17. Automaton<Regex> wrapper and recognize
-//  18. DAWG / stringUnion
-//  19. Invariant passes (removeZombieAcceptStates, eliminateDeadStates, reduce)
-//  20. Graphvizable — structural smoke test
-//  21. Codable round-trip for AlphabetRange
-//  22. isEmpty / isDeterministic / isMinimal flags
+//  17. DAWG / stringUnion
+//  18. Invariant passes (removeZombieAcceptStates, eliminateDeadStates, reduce)
+//  19. Graphvizable — structural smoke test
+//  20. Codable round-trip for AlphabetRange
+//  21. isEmpty / isDeterministic / isMinimal flags
 
 import Testing
 import Foundation
@@ -1049,118 +1048,8 @@ struct EpsilonRemovalTests {
 
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MARK: - 17. Automaton<Regex> Wrapper
 // ──────────────────────────────────────────────────────────────────────────────
-
-#if false
-// Do not use Automaton any longer - Use Lexer and LexerBuilder only
-
-@Suite(.disabled("Automaton Wrapper"))
-struct AutomatonWrapperTests {
-
-    @Test func wrapNFARegex() throws {
-        let r = try Regex("a+b")
-        let a = Automaton(r)
-        #expect(a.isDeterministic == false)
-        #expect(a.recognize(string: "ab") == true)
-        #expect(a.recognize(string: "aab") == true)
-        #expect(a.recognize(string: "b") == false)
-    }
-
-    @Test func wrapDFARegex() throws {
-        var r = try Regex("ab*")
-        r.isDeterministic = true
-        let a = Automaton(Regex.deterministicFiniteState(r))
-        #expect(a.isDeterministic == true)
-        #expect(a.run(string: "a") == true)
-        #expect(a.run(string: "abbb") == true)
-        #expect(a.run(string: "b") == false)
-    }
-
-    @Test func wrapNondeterministicFiniteState() throws {
-        let nfa = NFSA(
-            initial: 0,
-            finals: [1],
-            transitions: [Transition(from: 0, AlphabetRange.char("z"), to: 1)]
-        )
-        let a = Automaton(nfa)
-        #expect(a.run(string: "z") == true)
-        #expect(a.run(string: "x") == false)
-    }
-
-    @Test func wrapDeterministicFiniteState() throws {
-        let dfa = DFSA(
-            initial: 0,
-            finals: [1],
-            transitions: [Transition(from: 0, AlphabetRange.char("q"), to: 1)]
-        )
-        let a = Automaton(dfa)
-        #expect(a.run(string: "q") == true)
-        #expect(a.run(string: "p") == false)
-    }
-}
-
-
-// ──────────────────────────────────────────────────────────────────────────────
-// MARK: - 18. DAWG / stringUnion
-// ──────────────────────────────────────────────────────────────────────────────
-
-// Do not use Automaton any longer - Use Lexer and LexerBuilder only
-
-@Suite(.disabled("DAWG / String Union"))
-struct DAWGTests {
-
-    @Test func exactKeywordMatch() {
-        let keywords = ["if", "else", "while", "for", "return"]
-        let dfa = Automaton<DFSA>.stringUnion(words: keywords)
-        for kw in keywords {
-            #expect(dfa.run(string: kw) == true, "should accept keyword '\(kw)'")
-        }
-    }
-
-    @Test func nonKeywordRejected() {
-        let keywords = ["if", "else", "while"]
-        let dfa = Automaton<DFSA>.stringUnion(words: keywords)
-        #expect(dfa.run(string: "iff") == false)
-        #expect(dfa.run(string: "el") == false)
-        #expect(dfa.run(string: "whiles") == false)
-        #expect(dfa.run(string: "") == false)
-    }
-
-    @Test func singleWordDictionary() {
-        let dfa = Automaton<DFSA>.stringUnion(words: ["hello"])
-        #expect(dfa.run(string: "hello") == true)
-        #expect(dfa.run(string: "hell") == false)
-        #expect(dfa.run(string: "helloo") == false)
-    }
-
-    @Test func sharedPrefixWords() {
-        let dfa = Automaton<DFSA>.stringUnion(words: ["fore", "for", "ford"])
-        #expect(dfa.run(string: "for") == true)
-        #expect(dfa.run(string: "fore") == true)
-        #expect(dfa.run(string: "ford") == true)
-        #expect(dfa.run(string: "fo") == false)
-        #expect(dfa.run(string: "fore1") == false)
-    }
-
-    @Test func sharedSuffixWords() {
-        let dfa = Automaton<DFSA>.stringUnion(words: ["cat", "bat", "rat"])
-        #expect(dfa.run(string: "cat") == true)
-        #expect(dfa.run(string: "bat") == true)
-        #expect(dfa.run(string: "rat") == true)
-        #expect(dfa.run(string: "at") == false)
-    }
-
-    @Test func resultIsDeterministic() {
-        let dfa = Automaton<DFSA>.stringUnion(words: ["abc", "abd"])
-        #expect(dfa.isDeterministic == true)
-    }
-}
-
-#endif
-
-// ──────────────────────────────────────────────────────────────────────────────
-// MARK: - 19. Invariant Passes
+// MARK: - 17. Invariant Passes
 // ──────────────────────────────────────────────────────────────────────────────
 
 @Suite("Invariant Passes")
@@ -1214,7 +1103,7 @@ struct InvariantTests {
 
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MARK: - 20. Graphviz Rendering (Smoke Test)
+// MARK: - 18. Graphviz Rendering (Smoke Test)
 // ──────────────────────────────────────────────────────────────────────────────
 
 @Suite("Graphviz Rendering")
@@ -1249,7 +1138,7 @@ struct GraphvizTests {
 
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MARK: - 21. Codable Round-Trip for AlphabetRange
+// MARK: - 19. Codable Round-Trip for AlphabetRange
 // ──────────────────────────────────────────────────────────────────────────────
 
 @Suite("Codable AlphabetRange")
@@ -1280,7 +1169,7 @@ struct CodableAlphabetRangeTests {
 
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MARK: - 22. State Flags
+// MARK: - 20. State Flags
 // ──────────────────────────────────────────────────────────────────────────────
 
 @Suite("State Flags")

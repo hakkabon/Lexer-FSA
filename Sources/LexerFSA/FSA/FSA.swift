@@ -81,6 +81,74 @@ public protocol FSA {
     func move(state: Int, symbol: Character, over transitions: Set<Transition>) -> Set<Int>
 }
 
+// MARK: - Shared `FSA` Default Implementations
+
+/// Default implementations of the `FSA` requirements (plus the token-tracking
+/// helpers that both concrete automata expose) in terms of `state`.
+///
+/// `DFSA` and `NFSA` used to each redeclare every one of these members with
+/// an identical one-line forwarding body (`self.state.x`). Since both types
+/// only ever differ in their `Nondeterministic`/`Deterministic`-specific
+/// behaviour (`step`, `run`, `determinize`, `minimize`, …), the FSA-level
+/// surface can live here once and be inherited by any conforming type.
+extension FSA {
+
+    /// Returns true if `state` is `empty`.
+    public var isEmpty: Bool { state.isEmpty }
+
+    /// Returns true if `state` is `deterministic`.
+    public var isDeterministic: Bool { state.isDeterministic }
+
+    /// Returns true if `state` is `minimal`.
+    public var isMinimal: Bool { state.isMinimal }
+
+    /// Initial state of automaton.
+    public var initial: Int { state.initial }
+
+    /// Final states of automaton.
+    public var finals: Set<Int> { state.finals }
+
+    /// Number of states, not taking into account non-relevant zombie states.
+    public var stateCount: Int { state.stateCount }
+
+    /// Number of final states.
+    public var finalCount: Int { state.finalCount }
+
+    /// Returns alphabet defined on automaton.
+    public var alphabet: Alphabet { state.alphabet }
+
+    /// Returns true if given state is a `final` state of automaton.
+    public func isFinal(state: Int) -> Bool { self.state.isFinal(state: state) }
+
+    /// Returns true if given state is the `initial` state of automaton.
+    public func isInitial(state: Int) -> Bool { self.state.isInitial(state: state) }
+
+    /// Returns the set of states directly reachable from `source` via `symbol`.
+    public func move(state: Int, symbol: Character, over transitions: Set<Transition>) -> Set<Int> {
+        self.state.move(state: state, symbol: symbol, over: transitions)
+    }
+
+    /// Computes the set of all states transitively reachable from `source`.
+    public func reachableStates(from source: Int) -> Set<Int> {
+        state.reachableStates(from: source)
+    }
+
+    // MARK: Token Tracking
+
+    /// Maps final-state identifiers to their token class. Empty by default.
+    public var tokenMap: [Int: TokenClass] { state.tokenMap }
+
+    /// Returns the token class attached to `finalState`, if any.
+    public func tokenClass(for finalState: Int) -> TokenClass? { state.tokenClass(for: finalState) }
+
+    /// Replaces the entire token-class map. Mutating.
+    public mutating func setTokenMap(_ newMap: [Int: TokenClass]) { state.setTokenMap(newMap) }
+
+    /// Runs the automaton against `s` and returns the token class attached to
+    /// the accepting state reached, or `nil` if `s` is rejected.
+    public func recognizeWithToken(string s: String) -> TokenClass? { state.recognizeWithToken(string: s) }
+}
+
 
 /// Nondeterministic Finite State Protocol definition.
 public protocol Nondeterministic : FSA {

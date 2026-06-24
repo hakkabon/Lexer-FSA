@@ -1,6 +1,3 @@
-The view truncated the middle (lines 153–477). Let me get that section too so I can give you the complete file.Still missing lines 269–361. Let me get that section to complete the picture.Here is the complete `Technical.md` file (629 lines):
-
-```markdown
 # Lexer-FSA — Technical Reference
 
 This document gives an in-depth account of the design, data structures, algorithms, and in-progress work that make up the Lexer-FSA Swift package. It is aimed at contributors and integrators who need to understand the internals rather than just the public API.
@@ -75,15 +72,15 @@ The type parameter `T` is never stored at runtime — it exists purely to steer 
 
 | `T` | Used by | Meaning |
 |---|---|---|
-| `NondeterministicFiniteState` | `NondeterministicFiniteState` struct | NFA-specific extensions are in scope |
-| `DeterministicFiniteState` | `DeterministicFiniteState` struct | DFA-specific extensions are in scope |
+| `NFSA` | `NFSA` struct | NFA-specific extensions are in scope |
+| `DFSA` | `DFSA` struct | DFA-specific extensions are in scope |
 | `Regex` | `Regex` struct | Both NFA and DFA paths are in scope; the `Regex` type manages its own determinism flag |
 
-This design means that calling `epsClosure` on a `State<DeterministicFiniteState>` is a **compile-time error**, not a runtime guard. The approach is analogous to Swift's typed-throws or to the "newtype" pattern in Haskell.
+This design means that calling `epsClosure` on a `State<DFSA>` is a **compile-time error**, not a runtime guard. The approach is analogous to Swift's typed-throws or to the "newtype" pattern in Haskell.
 
 ### 2.3 Value semantics
 
-`State<T>` is an enum, and `NondeterministicFiniteState`, `DeterministicFiniteState`, and `Regex` are all structs. Every mutation (adding a transition, determinizing, minimizing) produces a new value. Because `Set<Transition>` can be large, Swift's copy-on-write semantics for `Set` keeps the cost reasonable in practice.
+`State<T>` is an enum, and `NFSA`, `DFSA`, and `Regex` are all structs. Every mutation (adding a transition, determinizing, minimizing) produces a new value. Because `Set<Transition>` can be large, Swift's copy-on-write semantics for `Set` keeps the cost reasonable in practice.
 
 ---
 
@@ -108,7 +105,7 @@ RegularLanguage             (state, builder, method, isDeterministic, isMinimal,
 └── RegularLanguageTransform    (removeEps, powerset)
 ```
 
-`AutomataOperation` (implemented on `Automaton<DeterministicFiniteState>`) adds the static factory methods `union(a:b:)`, `union(list:)`, and `stringUnion(words:)`.
+`AutomataOperation` (implemented on `DFSA`) adds the static factory methods `union(a:b:)`, `union(list:)`, and `stringUnion(words:)`.
 
 The split between `Nondeterministic` and `Deterministic` mirrors the mathematical distinction: `step` returns `Set<Int>` for NFAs (multiple successors possible) but `Int?` for DFAs (at most one successor). Protocol-level enforcement prevents accidental misuse, e.g., treating an NFA step result as a single state.
 
@@ -160,7 +157,7 @@ The `inAlphabet(char:)` and `inAlphabet(_:_:)` methods perform membership tests 
 
 ## 5. NFA Simulation
 
-Simulation of `NondeterministicFiniteState` follows the standard two-step loop:
+Simulation of `NFSA` follows the standard two-step loop:
 
 ```
 states ← ε-closure({q₀})
@@ -174,7 +171,7 @@ accept iff states ∩ F ≠ ∅
 
 **move** returns the set of states reachable from a given state via a given symbol, ignoring ε-edges.
 
-The `run(string:)` method on `State<NondeterministicFiniteState>` is the canonical simulation entry point.
+The `run(string:)` method on `State<NFSA>` is the canonical simulation entry point.
 
 ### Complexity
 
@@ -196,7 +193,7 @@ for each character ch in input:
 accept iff state ∈ F
 ```
 
-`step(state:symbol:over:)` on `State<DeterministicFiniteState>` filters the transition set to the current source state and returns the first matching target. Because the transition set is stored as an unordered `Set`, lookup is O(|Δ_state|) — the out-degree of the current state. For large automata a hash-indexed transition table would reduce this to O(1) (see §15).
+`step(state:symbol:over:)` on `State<DFSA>` filters the transition set to the current source state and returns the first matching target. Because the transition set is stored as an unordered `Set`, lookup is O(|Δ_state|) — the out-degree of the current state. For large automata a hash-indexed transition table would reduce this to O(1) (see §15).
 
 `successor(source:symbol:)` and `predecessors(target:symbol:)` expose the forward and reverse image of the transition function for use by the minimization algorithm.
 
@@ -443,7 +440,7 @@ The migration has been applied to:
 - `State<T>` — storage and accessors ✓
 - `Determinize.swift` — powerset construction propagates token map (has the shadowing bug described in §8) ✗
 - `Minimize.swift` — Hopcroft respects token class partitions (has the `.range` typo described in §9) ✗
-- `NondeterministicFiniteState` initializer — still uses the tokenMap-less overload ✗
+- `NFSA` initializer — still uses the tokenMap-less overload ✗
 - `Automaton<T>` initializers — strip the token map when wrapping ✗
 - `Graphvizable` — does not render token class labels on final states ✗
 
@@ -453,7 +450,7 @@ The migration has been applied to:
 
 `TrieBuilder` builds a trie from a sorted list of strings, then applies Daciuk's incremental minimization algorithm to produce a **Directed Acyclic Word Graph** (DAWG). Shared suffixes are merged, yielding the minimal DFA for the given finite set of words.
 
-`Automaton<DeterministicFiniteState>.stringUnion(words:)` wraps this: it inserts all words, calls `builder.minimize()`, then traverses the trie to collect `finals` and `transitions` into a `DeterministicFiniteState`.
+`DFSA.stringUnion(words:)` wraps this: it inserts all words, calls `builder.minimize()`, then traverses the trie to collect `finals` and `transitions` into a `DFSA`.
 
 This is the most efficient way to build a keyword-recognition automaton: the result is already minimal and deterministic, with no need for a subsequent powerset or Hopcroft pass.
 
@@ -513,7 +510,7 @@ This entry originally described `.char(let c)` being pattern-matched against a n
 
 ### 15.4 `reachableStates(from:)` returns only direct successors
 
-**Location**: `State.swift`, the `DeterministicFiniteState` and `NondeterministicFiniteState` extensions.
+**Location**: `State.swift`, the `DFSA` and `NFSA` extensions.
 
 The documentation says "computes the set of all states transitively reachable from the source state" but the implementation returns only one-hop neighbours:
 
@@ -553,7 +550,7 @@ public var isEmpty: Bool {
 
 ### 15.6 `isEquivalent` always returns `false`
 
-**Location**: `DeterministicFiniteState` and `Automaton<DeterministicFiniteState>`.
+**Location**: `DFSA` and `DFSA`.
 
 Both `isEquivalent` implementations are stubs. This breaks the `Deterministic` protocol contract and makes it impossible to test automaton equivalence (needed for verifying minimization correctness).
 
@@ -616,7 +613,7 @@ In a correctly constructed DFA there is at most one successor, so `.first` is sa
 
 **Location**: `State.swift`, `minimize()` inside the `extension State where T == DFSA` block.
 
-This entry originally described `minimize()` as a commented-out stub at the `State<T>` level, separate from (and not delegating to) the real implementation in `Minimize.swift`. The current source's `State where T == DFSA` extension wraps the call site's `(initial, finals, transitions)` into a fresh `DFSA`, invokes the real Hopcroft minimization on it, and writes the result back to `self` — it is a working delegation, not a stub. `Automaton<Type>.minimize()` calls through to it the same way. No action needed.
+This entry originally described `minimize()` as a commented-out stub at the `State<T>` level, separate from (and not delegating to) the real implementation in `Minimize.swift`. The current source's `State where T == DFSA` extension wraps the call site's `(initial, finals, transitions)` into a fresh `DFSA`, invokes the real Hopcroft minimization on it, and writes the result back to `self` — it is a working delegation, not a stub. `NFSA/DFSA.minimize()` calls through to it the same way. No action needed.
 
 ### 15.13 Typos in identifiers and comments
 
@@ -630,5 +627,3 @@ This entry originally described `minimize()` as a commented-out stub at the `Sta
 
 All step functions iterate over `Set<Transition>` filtered by source state. For automata with hundreds of states and a large alphabet, this is O(|Δ|) per character. A nested dictionary `[Int: [Character: Int]]` (state → symbol → target) would reduce DFA simulation to O(1) amortized per character, at the cost of higher memory usage. A two-level array `[[Int]]` indexed by renumbered states and alphabet positions is the classic representation and would also improve cache locality.
 ```
-
-A reminder on something I flagged earlier: §2.2 (the phantom-type table above), §5, §6, and §12 still say `NondeterministicFiniteState`/`DeterministicFiniteState` — those are the actual current names in *this* document's untouched sections, but the real types in the source are now `NFSA`/`DFSA` (as I corrected in §7–9 and in the README). I didn't touch those remaining sections since they're outside what the Antimirov task required — flagging again in case you want that cleaned up too.

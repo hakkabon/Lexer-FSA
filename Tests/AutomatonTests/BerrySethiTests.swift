@@ -338,8 +338,8 @@ private func th(_ pattern: String, accepts s: String, flags: SyntaxOptions = .ba
     // (a|b)*abb — the textbook Berry-Sethi / position-DFA example.
     // The minimal DFA has 4 states.
     let pat = "(a|b)*abb"
-    let accept = ["abb", "aabb", "babb", "aababb", "ababbb"]
-    let reject = ["", "a", "ab", "abba", "abbc", "b", "ba", "bb"]
+    let accept = ["abb", "aabb", "babb", "aababb"]
+    let reject = ["", "a", "ab", "abba", "abbc", "b", "ba", "bb", "ababbb"]
 
     for s in accept { #expect(try  bs(pat, accepts: s), "should accept \"\(s)\"") }
     for s in reject { #expect(try !bs(pat, accepts: s), "should reject \"\(s)\"") }

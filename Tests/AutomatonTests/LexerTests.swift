@@ -4,9 +4,14 @@ import Testing
 // ──────────────────────────────────────────────────────────────────────────────
 // MARK: - Lexer (§3.1, §3.2)
 // ──────────────────────────────────────────────────────────────────────────────
-
-#if false
-// Automaton has been removed - Use Lexer and LexerBuilder only
+//
+// Originally written against the `Automaton<Type>` container, which has
+// since been removed. The hand-rolled "union two NFAs, determinize, wrap as
+// a DFA" pipeline in `makeTwoTokenDFA`/`makeKeywordIdentifierDFA` below is
+// exactly what `LexerBuilder` now does for you (see LexerDesignTests.swift
+// for the `LexerBuilder`-based equivalent); it's kept here, low-level and
+// hand-assembled, so these tests exercise `Lexer` itself independently of
+// how its DFA was constructed.
 
 @Suite("Lexer — maximal-munch scanning")
 struct LexerTests {
@@ -16,18 +21,18 @@ struct LexerTests {
     /// NUM token class and IDENT final states carry the IDENT class. The
     /// lexer should walk it character by character, emitting one token
     /// per maximal-munch run.
-    private func makeTwoTokenDFA() -> Automaton<DFSA> {
+    private func makeTwoTokenDFA() -> DFSA {
         let numTok  = TokenClass(id: 1, name: "NUM",  priority: 1)
         let identTok = TokenClass(id: 2, name: "IDENT", priority: 1)
 
-        let num = Automaton<NFSA>(
+        let num = NFSA(
             initial: 0, finals: [1],
             transitions: [
                 Transition(from: 0, AlphabetRange.range("0","9"), to: 1),
                 Transition(from: 1, AlphabetRange.range("0","9"), to: 1),
             ],
             tokenMap: [1: numTok])
-        let ident = Automaton<NFSA>(
+        let ident = NFSA(
             initial: 0, finals: [1],
             transitions: [
                 Transition(from: 0, AlphabetRange.range("a","z"), to: 1),
@@ -36,16 +41,15 @@ struct LexerTests {
             tokenMap: [1: identTok])
 
         // NFA union, then determinize.
-        var united = Automaton<NFSA>.union(a: num, b: ident)
+        var united = NFSA.union(num, ident)
         united.determinize()
 
-        // Re-wrap as Automaton<DFSA>.
         switch united.state {
         case let .dfa(initial, finals, transitions, minimal, tokenMap):
-            return Automaton<DFSA>(DFSA(
+            return DFSA(
                 initial: initial, finals: finals,
                 transitions: transitions, minimal: minimal,
-                tokenMap: tokenMap))
+                tokenMap: tokenMap)
         case .nfa:
             fatalError("determinize() did not produce a .dfa state")
         }
@@ -137,20 +141,18 @@ struct LexerTests {
     }
 }
 
-// Automaton has been removed - Use Lexer and LexerBuilder only
-
 @Suite("Lexer — keyword-vs-identifier priority")
 struct LexerPriorityTests {
 
     /// Classic scanner ambiguity: "if" matches both the keyword pattern
     /// and the identifier pattern. After determinize, the accepting DFA
     /// state for "if" must carry the higher-priority KEYWORD class.
-    private func makeKeywordIdentifierDFA() -> Automaton<DFSA> {
+    private func makeKeywordIdentifierDFA() -> DFSA {
         let kw    = TokenClass(id: 1, name: "KW",    priority: 1)
         let ident = TokenClass(id: 2, name: "IDENT", priority: 10)
 
         // NFA for "if"
-        let ifNfa = Automaton<NFSA>(
+        let ifNfa = NFSA(
             initial: 0, finals: [2],
             transitions: [
                 Transition(from: 0, AlphabetRange.char("i"), to: 1),
@@ -158,7 +160,7 @@ struct LexerPriorityTests {
             ],
             tokenMap: [2: kw])
         // NFA for [a-z]+
-        let identNfa = Automaton<NFSA>(
+        let identNfa = NFSA(
             initial: 0, finals: [1],
             transitions: [
                 Transition(from: 0, AlphabetRange.range("a","z"), to: 1),
@@ -166,15 +168,15 @@ struct LexerPriorityTests {
             ],
             tokenMap: [1: ident])
 
-        var united = Automaton<NFSA>.union(a: ifNfa, b: identNfa)
+        var united = NFSA.union(ifNfa, identNfa)
         united.determinize()
 
         switch united.state {
         case let .dfa(initial, finals, transitions, minimal, tokenMap):
-            return Automaton<DFSA>(DFSA(
+            return DFSA(
                 initial: initial, finals: finals,
                 transitions: transitions, minimal: minimal,
-                tokenMap: tokenMap))
+                tokenMap: tokenMap)
         case .nfa:
             fatalError("determinize() did not produce a .dfa state")
         }
@@ -211,5 +213,3 @@ struct LexerPriorityTests {
         }
     }
 }
-
-#endif
