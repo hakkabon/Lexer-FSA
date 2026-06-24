@@ -1,12 +1,7 @@
 import Testing
 @testable import LexerFSA
 
-// DAWG / trie-based string-union construction. `Automaton.stringUnion(words:)`
-// (the former `Automaton<Type>` container) has been replaced by
-// `DFSA.stringUnion(words:)` — the trie/DAWG construction now lives directly
-// on the concrete deterministic automaton type.
-
-@Test
+@Test("Test Pascal Symbols")
 func testPascalSymbols() async throws {
 
     let symbols = [

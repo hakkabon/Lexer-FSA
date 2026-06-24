@@ -118,6 +118,7 @@ struct RegexParserTests {
 
     // MARK: - 5. Error Handling (Unhappy Paths)
     
+    // BUG: parser does not handle these well - runtime error
 //    @Test(
 //        "Expected Parser Errors",
 //        arguments: [

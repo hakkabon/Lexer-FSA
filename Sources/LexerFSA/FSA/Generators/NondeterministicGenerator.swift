@@ -9,13 +9,14 @@
 import Foundation
 
 
-extension State where T == NFSA {
+//extension State where T == NFSA {
+extension Nondeterministic {
 
     /// Generates a new automaton instance based on the provided configuration options.
     ///
     /// - Parameter options: A `GenerateOptions` object specifying the configuration and constraints for the automaton generation.
     /// - Returns: A new instance of type `T` (the Automaton).
-    public func generate(with options: GenerateOptions) -> NFSA {
+    public static func generate(with options: GenerateOptions) -> NFSA {
         guard case let .nfaStrategy(construction) = options.strategy else {
             fatalError("Internal inconsistency: Nondeterministic Generative method contains DFA argument.")
         }
@@ -27,7 +28,7 @@ extension State where T == NFSA {
         }
     }
 
-    public func generate1(with options: GenerateOptions) -> NFSA {
+    static func generate1(with options: GenerateOptions) -> NFSA {
         var initial = 0
         var transitions = Set<Transition>()
         var finals = Set<Int>()
@@ -96,7 +97,7 @@ extension State where T == NFSA {
     
     // MARK: - Alternative: Similar NFA Generator
     
-    public func generate2(with options: GenerateOptions) -> NFSA {
+    static func generate2(with options: GenerateOptions) -> NFSA {
         var initial = 0
         var transitions = Set<Transition>()
         var finals = Set<Int>()

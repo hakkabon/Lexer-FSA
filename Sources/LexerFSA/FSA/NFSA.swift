@@ -243,9 +243,9 @@ extension NFSA: Nondeterministic {
     ///
     /// - Parameter options: A `GenerateOptions` object specifying the configuration and constraints for the automaton generation.
     /// - Returns: A new instance of type `T` (the Automaton).
-    public func generate(with options: GenerateOptions) -> Subtype {
-        return self.state.generate(with: options)
-    }
+//    public func generate(with options: GenerateOptions) -> Subtype {
+//        return self.state.generate(with: options)
+//    }
 }
 
 // MARK: - CustomStringConvertible Conformance

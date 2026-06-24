@@ -1,37 +1,33 @@
 import Testing
 @testable import LexerFSA
 
-#if false
 
 @Test(.disabled("distinction between empty language and epsilon"))
 func testNilString() throws {
-    let s: String? = nil
-    let a = try Automaton(Regex.nondeterministicFiniteState(Regex(s!)))
-    try #require(a)
+    let a = try Regex.nondeterministicFiniteState(Regex("#", method: .thompson, flags: .all))   // empty language
+    try #require(a.isEmpty)
 }
 
 @Test(.disabled("distinction between empty language and epsilon"))
 func testEmptyString() throws {
-    let a = try Automaton(Regex.nondeterministicFiniteState(Regex("")))
+    let a = try Regex.nondeterministicFiniteState(Regex(""))
     print("\(a)")
-    try #require(a)
+    try #require(a.isEmpty)
 }
 
-
-@Test(.disabled("testSimpleString"))
+@Test("testSimpleString")
 func testSimpleString() throws {
     var r = try Regex("0")
     r.isDeterministic = true
-    let a = Automaton(Regex.deterministicFiniteState(r))
-    try #require(a)
+    let a = Regex.deterministicFiniteState(r)
+    try #require(a.stateCount == 2)
 }
 
-@Test(.disabled("testSimpleString2"))
+@Test("testSimpleString2")
 func testSimpleString2() throws {
     var r = try Regex("01")
     r.isDeterministic = true
-    let a = Automaton(Regex.deterministicFiniteState(r))
-    try #require(a)
+    let a = Regex.deterministicFiniteState(r)
+    try #require(a.stateCount == 3)
 }
 
-#endif
