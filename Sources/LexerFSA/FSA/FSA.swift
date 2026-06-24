@@ -78,10 +78,13 @@ public protocol FSA {
     /// transitions (ε and non-ε alike).
     func reachableStates(from source: Int) -> Set<Int>
 
+    /// Returns the set of states directly reachable from `source` via `symbol`.
     func move(state: Int, symbol: Character, over transitions: Set<Transition>) -> Set<Int>
 }
 
-// MARK: - Shared `FSA` Default Implementations
+// --------------------------------------------------------------
+// MARK: - Default Implementations (Idiomatic Swift)
+// --------------------------------------------------------------
 
 /// Default implementations of the `FSA` requirements (plus the token-tracking
 /// helpers that both concrete automata expose) in terms of `state`.
@@ -149,8 +152,10 @@ extension FSA {
     public func recognizeWithToken(string s: String) -> TokenClass? { state.recognizeWithToken(string: s) }
 }
 
-
+/// --------------------------------------------------------------
 /// Nondeterministic Finite State Protocol definition.
+/// --------------------------------------------------------------
+
 public protocol Nondeterministic : FSA {
     /// Actual type value of the Finite State Automaton.
     associatedtype Subtype
@@ -181,9 +186,6 @@ public protocol Nondeterministic : FSA {
 
     /// Check if state `target` is reachable from state `source` consuming `symbol`.
     func isSuccessor(source: Int, symbol: Character, target: Int) -> Bool
-
-    /// Get all reachable states from `source` regardless of `symbol` on transitions.
-    func reachableStates(from source: Int) -> Set<Int>
     
     // MARK: - Mutation Functions
     
@@ -193,17 +195,21 @@ public protocol Nondeterministic : FSA {
     /// Adds transition from `source` state with an input `symbol` and its `target` state.
     mutating func add(_ transition: Transition)
 
-    // MARK: - Transformation & Factory Methods
+    // MARK: - Transformation
 
     /// Powerset construction method.
     mutating func determinize()
+
+    // MARK: - Factory Methods
 
     /// Returns a randomly created Nondeterministic Finit Automaton.
     func generate(with options: GenerateOptions) -> Subtype
 }
 
-
+/// --------------------------------------------------------------
 /// Deterministic Finite State Protocol definition.
+/// --------------------------------------------------------------
+
 public protocol Deterministic : FSA {
     /// Actual type value of the Finite State Automaton.
     associatedtype Subtype
@@ -232,27 +238,31 @@ public protocol Deterministic : FSA {
     /// Check if state `target` is reachable from state `source` consuming `symbol`.
     /// - Complexity: O(1)
     func isSuccessor(source: Int, symbol: Character, target: Int) -> Bool
-    
-    /// Get all reachable states from `source` regardless of `symbol` on transitions.
-//    func reachableStates(from source: Int) -> Set<Int>
+
+    /// Tests whether two states p,q are equivalent (indistinguishable).
+    func isEquivalent(to other: DFSA) -> Bool
+
+    // MARK: - Mutating Invariant
 
     /// Deterministic invariant
     mutating func invariant()
     
-    // MARK: - Factory Methods & Minimization
-
-    /// Returns a randomly created Deterministic Finit Automaton.
-    func generate(with options: GenerateOptions) -> Subtype
+    // MARK: - Mutating Minimization
 
     /// Minimize finite state automaton.
     mutating func minimize()
 
-    /// Tests whether two states p,q are equivalent (indistinguishable).
-    func isEquivalent(a: Self, p: Int, q: Int, c: [Int]) -> Bool
+    // MARK: - Factory Methods
+
+    /// Returns a randomly created Deterministic Finit Automaton.
+    func generate(with options: GenerateOptions) -> Subtype
 }
 
+/// --------------------------------------------------------------
+/// Regular Protocol definition
+/// with Nondeterministic / Deterministic subtypes
+/// --------------------------------------------------------------
 
-/// Deterministic Finite State Protocol definition.
 public protocol Regular {
     /// Actual type value of the Finite State Automaton.
     associatedtype Subtype

@@ -228,6 +228,16 @@ extension State {
         return nil
     }
     
+    /// BUG: 15.4 reachableStates(from:) returns only direct successors
+    /// 
+    /// Computes the set of all states transitively reachable from `source` via
+    /// any sequence of labelled transitions (ε and non-ε alike).
+    ///
+    /// Uses an iterative BFS so it correctly returns the full transitive closure,
+    /// not just the one-hop neighbours.
+    ///
+    /// - Parameter source: The identifier of the starting state.
+    /// - Returns: A `Set` of reachable state identifiers, including `source` itself.
     public func reachableStates(from source: Int) -> Set<Int> {
         let transitions = fields.transitions
         var visited = Set<Int>([source])
@@ -445,27 +455,6 @@ extension State where T == NFSA {
             $0.source == source && $0.target == target && $0.inAlphabet(char: symbol)
         }
     }
-    
-    /// Computes the set of all states transitively reachable from `source` via
-    /// any sequence of labelled transitions (ε and non-ε alike).
-    ///
-    /// Uses an iterative BFS so it correctly returns the full transitive closure,
-    /// not just the one-hop neighbours.
-    ///
-    /// - Parameter source: The identifier of the starting state.
-    /// - Returns: A `Set` of reachable state identifiers, including `source` itself.
-//    public func reachableStates(from source: Int) -> Set<Int> {
-//        guard case let .nfa(_, _, transitions, _) = self else { return Set<Int>() }
-//        var visited = Set<Int>([source])
-//        var queue   = [source]
-//        while !queue.isEmpty {
-//            let current = queue.removeFirst()
-//            for t in transitions where t.source == current {
-//                if visited.insert(t.target).inserted { queue.append(t.target) }
-//            }
-//        }
-//        return visited
-//    }
 
     /// Adds a new transition to the automaton.
     ///
@@ -629,25 +618,67 @@ extension State where T == DFSA {
         }
     }
     
-    /// Computes the set of all states transitively reachable from `source` via
-    /// any sequence of labelled transitions.
-    ///
-    /// Uses an iterative BFS, returning the full transitive closure.
-    ///
-    /// - Parameter source: The identifier of the starting state.
-    /// - Returns: A `Set` of reachable state identifiers, including `source` itself.
-//    public func reachableStates(from source: Int) -> Set<Int> {
-//        guard case let .dfa(_, _, transitions, _, _) = self else { return Set<Int>() }
-//        var visited = Set<Int>([source])
-//        var queue = [source]
-//        while !queue.isEmpty {
-//            let current = queue.removeFirst()
-//            for t in transitions where t.source == current {
-//                if visited.insert(t.target).inserted { queue.append(t.target) }
-//            }
-//        }
-//        return visited
-//    }
+    /// Tests whether two states p,q are equivalent (indistinguishable) in the
+    /// sense that p=q mod c and p.a=q.a mod c for every letter a (alphabet).
+    /// Algorithm 1.6.1:
+    ///```
+    /// CheckEquivalence((Σ, Q, q0, F, δ), (Σ, Q′, q0′, F′, δ′))
+    /// if (q0 ∈ F and q0′ ∉ F′) or (q0 ∉ F and q0′ ∈ F′)
+    ///     return (False)
+    /// Enqueue(Queue, ⟨q0,q0′⟩)
+    /// while Queue ≠ ∅
+    ///     ⟨q,q′⟩ ← Dequeue(Queue)
+    ///     for a ∈ Σ
+    ///         if both δ(q,a), δ′(q′,a) are defined
+    ///             if (δ(q,a) ∈ F and δ′(q′,a) ∉ F′) or (δ(q,a) ∉ F and δ′(q′,a) ∈ F′)
+    ///                 return (False)
+    ///             else if ⟨δ(q,a), δ′(q′,a)⟩ is a new pair
+    ///                 Enqueue(Queue, ⟨δ(q,a), δ′(q′,a)⟩)
+    ///         else if only one of δ(q,a), δ′(q′,a) is defined
+    ///             return (False)
+    /// return (True)
+    ///```
+    /// - Parameters:
+    ///   - p: a state
+    ///   - q: a state
+    ///   - c: c blocknames
+    /// - Returns: true if p=q mod c and p.u=q.u mod c for every letter u
+    public func isEquivalent(to other: DFSA) -> Bool {
+        return false
+#if false
+        guard case let .dfa(_, finals, _, _) = self else { return false }
+
+        let queue = Queue<(Int,Int)>()
+        
+        // 1. tests whether two states are equivalent (within in the same partition)
+        // 1. tests whether two states are equivalent (within in the same partition)
+        if finals.contains(p) && !finals.contains(q) || !finals.contains(p) && finals.contains(q) {
+            return false
+        }
+        queue.enqueue((p,q))
+        while !queue.isEmpty {
+            let (pp,qq) = queue.dequeue()
+            for alpha in alphabet.characters {
+                if
+                    let s1 = successor(source: p, symbol: alpha),
+                    let s2 = successor(source: q, symbol: alpha)
+                {
+                    if
+                        finals.contains(s1) && !finals.contains(s2) ||
+                            !finals.contains(s1) && finals.contains(s2)
+                    {
+                        return false
+                    } else {
+                        queue.enqueue((pp,qq))
+                    }
+                } else {
+                    return false
+                }
+            }
+        }
+        return true
+#endif
+    }
 
     /// Deterministic invariant
     mutating func invariant() {

@@ -115,7 +115,7 @@ extension DFSA: FSA {
     }
 }
 
-extension DFSA: Deterministic {    
+extension DFSA: Deterministic {
 
     /// Simulates the automaton to determine if it accepts the given input string.
     ///
@@ -181,7 +181,12 @@ extension DFSA: Deterministic {
     public func isSuccessor(source: Int, symbol: Character, target: Int) -> Bool {
         return self.state.isSuccessor(source: source, symbol: symbol, target: target)
     }
-    
+
+    /// Tests whether two deterministic automata are equivalent (indistinguishable),
+    public func isEquivalent(to other: DFSA) -> Bool {
+        return self.state.isEquivalent(to: other)
+    }
+
     /// Computes the set of all states transitively reachable from the source state.
     ///
     /// This function performs a traversal (e.g., BFS or DFS) starting from `source`
@@ -192,10 +197,6 @@ extension DFSA: Deterministic {
     public func reachableStates(from source: Int) -> Set<Int> {
         return self.state.reachableStates(from: source)
     }
-
-//    public mutating func minimize() {
-//        self.state.minimize()
-//    }
 
     /// Generates a new automaton instance based on the provided configuration options.
     /// Generate a random DFA using the bridge-based strategy
@@ -208,10 +209,6 @@ extension DFSA: Deterministic {
     /// - Returns: A new instance of type `T` (the Automaton).
     public func generate(with options: GenerateOptions) -> Self {
         return self.state.generate(with: options)
-    }
-
-    public func isEquivalent(a: DFSA, p: Int, q: Int, c: [Int]) -> Bool {
-        return false
     }
 }
 
