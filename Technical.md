@@ -565,7 +565,7 @@ public var isEmpty: Bool {
 
 **Status**: RESOLVED ✅ (fully functional equivalence checking for minimization verification)
 
-### 15.7 ~~`Automaton.union(list:)` is a stub ~~ — RESOLVED
+### 15.7 ~~`Automaton.union(list:)` is a stub~~ — RESOLVED
 
 **Location**: `Operations.swift`, `union(list:)`.
 
@@ -644,7 +644,7 @@ return nextStates.first
 
 This entry originally described `minimize()` as a commented-out stub at the `State<T>` level, separate from (and not delegating to) the real implementation in `Minimize.swift`. The current source's `State where T == DFSA` extension wraps the call site's `(initial, finals, transitions)` into a fresh `DFSA`, invokes the real Hopcroft minimization on it, and writes the result back to `self` — it is a working delegation, not a stub. `NFSA/DFSA.minimize()` calls through to it the same way. No action needed.
 
-### 15.13 Typos in identifiers and comments
+### 15.13 ~~Typos in identifiers and comments~~ — RESOLVED
 
 - ~~File name: `FIniteStateProtocol.swift` — capital `I` in `FInite`. (Note: no file by this name exists in the current source tree; the FSA protocol now lives in `FSA.swift`. Re-verify before acting on this entry.)~~ - RESOLVED
 - ~~Comment: `"autmaton"` (missing 'o') appears in several places.~~ - RESOLVED 
