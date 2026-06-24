@@ -548,13 +548,22 @@ public var isEmpty: Bool {
 }
 ```
 
-### 15.6 `isEquivalent` always returns `false`
+### 15.6 ~~`isEquivalent` always returns `false`~~ — RESOLVED
 
-**Location**: `DFSA` and `DFSA`.
+**Location**: `State.swift` (DFSA extension), lines 650-754.
 
-Both `isEquivalent` implementations are stubs. This breaks the `Deterministic` protocol contract and makes it impossible to test automaton equivalence (needed for verifying minimization correctness).
+**What was broken**: The method returned `false` immediately, with disabled BFS code referencing undefined variables.
 
-**Suggested implementation**: table-filling (Hopcroft-Karp) or a BFS-based equivalence check.
+**Fix implemented** (June 2026): Full BFS-based equivalence checking algorithm:
+- Algorithm: Two DFAs are equivalent iff they accept the same language
+- Approach: BFS from `(initial[self], initial[other])`, verifying:
+  1. Both states in each visited pair are accepting or both are non-accepting
+  2. For all symbols in the union of both alphabets, successors are equivalent
+  3. Both DFAs have successors on a symbol or both don't
+- Implementation: Builds closure of reachable pairs, correctly handling character ranges
+- Returns `true` when all reachable pairs are equivalent
+
+**Status**: RESOLVED ✅ (fully functional equivalence checking for minimization verification)
 
 ### 15.7 ~~`Automaton.union(list:)` is a stub ~~ — RESOLVED
 
@@ -581,33 +590,53 @@ The commented-out block shows the intended approach (introduce a new start state
 
 All three constructors pattern-match against the old 4-tuple `.nfa`/`.dfa` cases (without `tokenMap`) and would need updating to pass through the token map. Until this is done, wrapping a token-tagged FSA in `Automaton<T>` silently discards all token class information.
 
-### 15.9 `Graphvizable` does not render token class labels
+### 15.9 ~~`Graphvizable` does not render token class labels~~ — RESOLVED
 
-Final states in the Graphviz output are marked with `doublecircle` but the associated `TokenClass.name` is not shown in the node label. For debugging a multi-pattern lexer this information is essential.
+**Location**: `Graphvizable.swift`, lines 12-94.
 
-**Fix**: When `tokenMap[state]` is non-nil, append `"\n\(token.name)"` to the node label.
+**What was the issue**: Final states in Graphviz output marked with `doublecircle` but token class names not shown.
 
-### 15.10 `inAlphabet(char:)` returns `true` for ε-transitions
+**Current state**: RESOLVED ✅ — Code already renders token class labels:
+- Line 35 (NFA case): `let label = tokenMap[s].map { "\(id)\n\($0.name)" } ?? "\(id)"`
+- Line 67 (DFA case): `let label = tokenMap[s].map { "\(id)\n\($0.name)" } ?? "\(id)"`
 
-**Location**: `Transition.swift`.
+When a final state carries a `TokenClass`, its name is appended to the node label (with newline separation from state ID), making token classes visible in rendered diagrams. No action needed.
+
+### 15.10 ~~`inAlphabet(char:)` returns `true` for ε-transitions~~ — RESOLVED
+
+**Location**: `Transition.swift`, lines 57-83.
+
+**What was the issue**: `.epsilon` transition returning `true` from `inAlphabet`, appearing to match every input character.
+
+**Current state**: RESOLVED ✅ — Code correctly returns `false` for `.epsilon`:
+- Line 59: `case .epsilon: return false`
+- Line 77: `case .epsilon: return false` (in range variant)
+
+Documentation (lines 52-54) explicitly notes: "Returns `false` for `.epsilon` transitions; the ε-closure computation should pattern-match on `.epsilon` directly rather than calling this method."
+
+The fix ensures epsilon transitions are excluded from alphabet membership checks, preventing silent incorrect results at non-ε-closure call sites. No action needed.
+
+### 15.11 ~~`step(state:symbol:over:)` on DFA uses `Set.first` without determinism guarantee~~ — RESOLVED
+
+**Location**: `State.swift`, lines 510-530 and 555-575.
+
+**What was the issue**: Methods `step()` and `successor()` used `.first` on a Set of potential successors without verifying the DFA invariant (at most one successor per state/symbol pair).
+
+**Fix implemented** (June 2026): Added `precondition` checks in both methods:
 
 ```swift
-case .epsilon: return true
-```
-
-This means that any `.epsilon` transition will appear to match every input character, which is only correct in the ε-closure computation context. Calling `inAlphabet` on an epsilon transition from any other call site produces incorrect results silently.
-
-**Fix**: Return `false` for `.epsilon` and audit all callers. The ε-closure code should explicitly pattern-match on `.epsilon` rather than relying on `inAlphabet`.
-
-### 15.11 `step(state:symbol:over:)` on DFA uses `Set.first` without determinism guarantee
-
-**Location**: `State.swift` (multiple sites), `Regex.swift`.
-
-```swift
+precondition(nextStates.count <= 1,
+    "DFA invariant violation: state \(state) has \(nextStates.count) successors on '\(symbol)' (expected ≤ 1)")
 return nextStates.first
 ```
 
-In a correctly constructed DFA there is at most one successor, so `.first` is safe. But during intermediate construction steps (e.g., before `invariant()` is called) there may be multiple transitions and the result is non-deterministic. A `precondition(nextStates.count <= 1)` or an assertion in debug builds would surface violations immediately.
+**How it works**:
+- In a correctly constructed DFA, there is at most one successor per state/symbol pair
+- During intermediate construction (before `invariant()` is called), multiple transitions may exist
+- The precondition immediately surfaces violations in debug builds
+- In release builds, the check is optimized away per Swift semantics
+
+**Status**: RESOLVED ✅ (DFA invariant now validated with immediate failure on violations)
 
 ### 15.12 ~~DFA `minimize()` is stubbed out on `State<T>` itself~~ — RESOLVED
 

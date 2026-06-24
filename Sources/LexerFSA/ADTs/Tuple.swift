@@ -1,47 +1,5 @@
 import Foundation
 
-/// 2-Tuple (V,V).
-/// Is needed in abscence of Tuple with auto hash code.
-public struct Tup<V: Hashable & Comparable & Codable> {
-    public var a: V
-    public var b: V
-
-    public init(_ a: V, _ b: V) {
-        self.a = a
-        self.b = b
-    }
-}
-
-extension Tup: Hashable {
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(a)
-        hasher.combine(b)
-    }
-}
-
-extension Tup: Equatable {
-    public static func == (lhs: Tup, rhs: Tup) -> Bool {
-        return lhs.a == rhs.a && lhs.b == rhs.b
-    }
-}
-
-extension Tup: Comparable {
-    public static func < (lhs: Tup, rhs: Tup) -> Bool {
-        if lhs.a != rhs.a {
-            return lhs.a < rhs.a
-        } else {
-            return lhs.b < rhs.b
-        }
-    }
-}
-
-extension Tup: CustomStringConvertible {
-
-    public var description: String {
-        return "(\(a),\(b))"
-    }
-}
-
 /// 2-Tuple (U,V).
 /// Is needed in abscence of Tuple with auto hash code.
 public struct Tuple<U: Hashable & Comparable, V: Hashable & Comparable> {

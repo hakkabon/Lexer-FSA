@@ -177,7 +177,6 @@ extension FSA {
 extension Deterministic {
 
     public mutating func invariant() {
-        // deterministic()
         removeZombieAcceptStates()
         eliminateDeadStates()
         removeDeadTransitions()

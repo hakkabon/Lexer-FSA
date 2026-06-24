@@ -178,7 +178,7 @@ public struct Regex: RegularLanguage {
     /// return (A′ = (Σ, Q, I′, F′, ∆′))
     ///
     public mutating func removeEps(initial: Int, finals: Set<Int>, transitions: Set<Transition>) -> (initial: Int, finals: Set<Int>, transitions: Set<Transition>) {
-        let states: Set<Int> = epsClosure(state: initial, over: transitions)
+        let _: Set<Int> = epsClosure(state: initial, over: transitions)
         var finalStates = Set<Int>()
         var epsfree = Set<Transition>()
 

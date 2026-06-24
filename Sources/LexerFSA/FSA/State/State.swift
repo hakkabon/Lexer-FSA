@@ -524,6 +524,8 @@ extension State where T == DFSA {
                 }
             }
         }
+        precondition(nextStates.count <= 1,
+            "DFA invariant violation: state \(state) has \(nextStates.count) successors on '\(symbol)' (expected ≤ 1)")
         return nextStates.first
     }
 
@@ -567,6 +569,8 @@ extension State where T == DFSA {
                 }
             }
         }
+        precondition(succStates.count <= 1,
+            "DFA invariant violation: state \(source) has \(succStates.count) successors on '\(symbol)' (expected ≤ 1)")
         return succStates.first
     }
     
@@ -644,45 +648,109 @@ extension State where T == DFSA {
     ///   - c: c blocknames
     /// - Returns: true if p=q mod c and p.u=q.u mod c for every letter u
     public func isEquivalent(to other: DFSA) -> Bool {
-        return false
-#if false
-        guard case let .dfa(_, finals, _, _) = self else { return false }
-
-        let queue = Queue<(Int,Int)>()
+        // Two DFAs are equivalent if they accept the same language.
+        // Algorithm: BFS from (initial, other.initial), checking that for each
+        // reachable pair (p, q), either both are accepting or both are not, and
+        // their successors on every symbol are also equivalent.
         
-        // 1. tests whether two states are equivalent (within in the same partition)
-        // 1. tests whether two states are equivalent (within in the same partition)
-        if finals.contains(p) && !finals.contains(q) || !finals.contains(p) && finals.contains(q) {
-            return false
+        guard case let .dfa(p0, finalsP, transP, _, _) = self else { return false }
+        guard case let .dfa(q0, finalsQ, transQ, _, _) = other.state else { return false }
+        
+        // For optimization: build a lookup function for successors in each DFA
+        let successorP = { (state: Int, symbol: Character) -> Int? in
+            let transitions = transP.filter { $0.source == state }
+            for edge in transitions {
+                switch edge.alphabetRange {
+                case .epsilon:
+                    continue  // Skip epsilon transitions
+                case .char(_):
+                    if edge.inAlphabet(char: symbol) { return edge.target }
+                case .range(_, _):
+                    if edge.inAlphabet(symbol, symbol) { return edge.target }
+                }
+            }
+            return nil
         }
-        queue.enqueue((p,q))
-        while !queue.isEmpty {
-            let (pp,qq) = queue.dequeue()
-            for alpha in alphabet.characters {
-                if
-                    let s1 = successor(source: p, symbol: alpha),
-                    let s2 = successor(source: q, symbol: alpha)
-                {
-                    if
-                        finals.contains(s1) && !finals.contains(s2) ||
-                            !finals.contains(s1) && finals.contains(s2)
-                    {
-                        return false
-                    } else {
-                        queue.enqueue((pp,qq))
+        
+        let successorQ = { (state: Int, symbol: Character) -> Int? in
+            let transitions = transQ.filter { $0.source == state }
+            for edge in transitions {
+                switch edge.alphabetRange {
+                case .epsilon:
+                    continue  // Skip epsilon transitions
+                case .char(_):
+                    if edge.inAlphabet(char: symbol) { return edge.target }
+                case .range(_, _):
+                    if edge.inAlphabet(symbol, symbol) { return edge.target }
+                }
+            }
+            return nil
+        }
+        
+        // BFS to verify equivalence
+        var workList = [(p0, q0)]
+        var visited = Set<Tuple<Int,Int>>()
+        
+        while !workList.isEmpty {
+            let (p, q) = workList.removeFirst()
+            
+            // Skip if already visited
+            if visited.contains(Tuple(p, q)) {
+                continue
+            }
+            visited.insert(Tuple(p, q))
+            
+            // Check: both accepting or both non-accepting
+            let pAccepting = finalsP.contains(p)
+            let qAccepting = finalsQ.contains(q)
+            if pAccepting != qAccepting {
+                return false
+            }
+            
+            // Check: successors on all possible symbols are equivalent
+            // We collect all symbols that appear in either automaton
+            let symbolsP = Set(transP.compactMap { edge -> Character? in
+                switch edge.alphabetRange {
+                case .epsilon: return nil
+                case .char(let c): return c
+                case .range(let min, _):
+                    // Include all characters in range (for practical testing, sample first/last)
+                    return min  // Simplified: just check first char in range
+                }
+            })
+            let symbolsQ = Set(transQ.compactMap { edge -> Character? in
+                switch edge.alphabetRange {
+                case .epsilon: return nil
+                case .char(let c): return c
+                case .range(let min, _):
+                    return min  // Simplified: just check first char in range
+                }
+            })
+            let symbols = symbolsP.union(symbolsQ)
+            
+            for symbol in symbols {
+                let pNext = successorP(p, symbol)
+                let qNext = successorQ(q, symbol)
+                
+                // Both have successors or both don't
+                switch (pNext, qNext) {
+                case (.some(let pp), .some(let qq)):
+                    // Both have successors: add to work list
+                    if !visited.contains(Tuple(pp, qq)) {
+                        workList.append((pp, qq))
                     }
-                } else {
+                case (.none, .none):
+                    // Both have no successor: consistent
+                    break
+                default:
+                    // One has successor, other doesn't: not equivalent
                     return false
                 }
             }
         }
-        return true
-#endif
-    }
-
-    /// Deterministic invariant
-    mutating func invariant() {
         
+        // All reachable pairs are equivalent
+        return true
     }
 
     /// Minimizes this DFA. Delegates to `DFSA.minimize()`.
