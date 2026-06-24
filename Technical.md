@@ -508,20 +508,42 @@ This entry originally described `.char(let c)` being pattern-matched against a n
 
 `AlphabetRange` already has an `.epsilon` case. `AlphabetEpsRange` is an exact structural copy and is not referenced anywhere in the current codebase. It should be deleted.
 
-### 15.4 `reachableStates(from:)` returns only direct successors
+### 15.4 ~~`reachableStates(from:)` returns only direct successors~~ — RESOLVED
 
-**Location**: `State.swift`, the `DFSA` and `NFSA` extensions.
+**Location**: `State.swift` (T-agnostic extension), lines 241-252.
 
-The documentation says "computes the set of all states transitively reachable from the source state" but the implementation returns only one-hop neighbours:
+**Status**: FALSE POSITIVE ✅ — The current implementation is CORRECT.
 
+**Current Implementation**:
 ```swift
-let targetStates = transitions.filter { $0.source == source }.map { $0.target }
-return Set<Int>(targetStates)
+public func reachableStates(from source: Int) -> Set<Int> {
+    let transitions = fields.transitions
+    var visited = Set<Int>([source])
+    var queue = [source]
+    while !queue.isEmpty {
+        let current = queue.removeFirst()
+        for t in transitions where t.source == current {
+            if visited.insert(t.target).inserted { queue.append(t.target) }
+        }
+    }
+    return visited
+}
 ```
 
-`Invariant.eliminateDeadStates()` performs a proper BFS using its own loop and does not call this method, but any external caller relying on the documented contract will get wrong results.
+**What was the issue**: The Technical.md description referenced old code that returned only direct successors via a simple filter/map. This code is no longer in the repository.
 
-**Fix**: Implement a BFS/DFS loop analogous to the one in `eliminateDeadStates`.
+**Current behavior**: The implementation uses a proper **BFS (Breadth-First Search)** algorithm that correctly computes all transitively reachable states:
+1. Initialize visited set with source state
+2. Use queue for BFS exploration
+3. For each state in queue, find all outgoing transitions
+4. Add unvisited successors to both visited set and queue
+5. Return all visited states when queue is empty
+
+**Verification**: For any graph reachable states are computed transitively, not just direct successors.
+
+Example: Graph `0 → 1 → 2 → 3` returns `{0,1,2,3}`, not just `{1}`.
+
+**Note**: The issue description in Technical.md was outdated and referenced code that had already been fixed. No further action needed — the implementation is correct and matches its documented contract.
 
 ### 15.5 ~~`isEmpty` always returns `false`~~ — RESOLVED
 
