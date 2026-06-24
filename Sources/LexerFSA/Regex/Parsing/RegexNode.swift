@@ -12,7 +12,7 @@
 //  Replaces the former class-based `ParseNode` / `Or` / `Con` / `Opt` / `Rep` /
 //  `Leaf` hierarchy (see git history) with a single immutable, indirect value
 //  type plus pure functions over it. Used exclusively by the Berry-Sethi
-//  (Glushkov / position-DFA) construction in `BerrySehti.swift`.
+//  (Glushkov / position-DFA) construction in `BerrySethi.swift`.
 //
 //  Why a value type instead of a class hierarchy
 //  ──────────────────────────────────────────────

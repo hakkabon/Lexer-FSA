@@ -51,7 +51,7 @@ public struct Regex: RegularLanguage {
         case illegalInterval(Int,Int,String)
     }
 
-    // used in `RegexBerrySehti.swift` only.
+    // used in `RegexBerrySethi.swift` only.
     enum Metasymbol: String, CaseIterable {
         case or = "|"
         case colon = ":"

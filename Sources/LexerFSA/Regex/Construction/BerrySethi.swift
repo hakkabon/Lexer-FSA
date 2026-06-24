@@ -1,5 +1,5 @@
 //
-//  RegexBerrySehti.swift
+//  BerrySethi.swift
 //  lexer-fsa
 //
 //  Created by Ulf Akerstedt-Inoue on 2020/06/03.

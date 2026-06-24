@@ -17,7 +17,7 @@ import Foundation
 ///     mattered).
 ///   - The singleton was not thread-safe.
 ///   - BerrySethi had to work around collisions with a private local counter
-///     (see the `BUG 1` comment in BerrySehti.swift).
+///     (see the `BUG 1` comment in BerrySethi.swift).
 ///
 /// The singleton has been removed. Each construction algorithm now owns its
 /// own `Counter()` instance, so its results are self-contained and

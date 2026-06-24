@@ -234,7 +234,7 @@ This produces an ε-NFA with O(|expression|) states and transitions. The resulti
 
 ### 7.3 Berry-Sethi Construction
 
-`BerrySethi` (`Construction/BerrySehti.swift`, selectable via `ConstructionMethod.berrySethi`) implements the Glushkov / Berry-Sethi position automaton:
+`BerrySethi` (`Construction/BerrySethi.swift`, selectable via `ConstructionMethod.berrySethi`) implements the Glushkov / Berry-Sethi position automaton:
 
 1. Parse the *augmented* expression `r#` — the trailing `#` sentinel gets the highest leaf position, and is the only mechanism this method has for detecting acceptance (see 7.4 for why Antimirov needs no such trick).
 2. Build a positional tree, `RegexNode` (`Construction/RegexNode.swift`) — an immutable, indirect value enum (`empty` / `symbol(Character, id:)` / `concat` / `alternation` / `star`), one leaf per symbol occurrence, atomically with a `leafExpressions: [Int: Expression]` table recording what each leaf actually matches (needed because a single `RegexNode.symbol` can't carry a full character range or "any character" — `leafExpressions` is the authoritative lookup for matching; the `Character` `RegexNode.symbol` carries is cosmetic, used only for `description`/debug output).
@@ -504,7 +504,7 @@ This entry originally described `let nextDfaState: Int` shadowing an outer `var 
 
 This entry originally described `.char(let c)` being pattern-matched against a nonexistent `transition.range` property instead of `transition.alphabetRange`, which would have prevented the file from compiling. The current source already uses `transition.alphabetRange` throughout (confirmed while implementing §7.4/§9.2) — no action needed.
 
-### 15.3 `AlphabetEpsRange` duplicates `AlphabetRange`
+### 15.3 ~~`AlphabetEpsRange` duplicates `AlphabetRange`~~ — RESOLVED
 
 `AlphabetRange` already has an `.epsilon` case. `AlphabetEpsRange` is an exact structural copy and is not referenced anywhere in the current codebase. It should be deleted.
 
@@ -523,7 +523,7 @@ return Set<Int>(targetStates)
 
 **Fix**: Implement a BFS/DFS loop analogous to the one in `eliminateDeadStates`.
 
-### 15.5 `isEmpty` always returns `false`
+### 15.5 ~~`isEmpty` always returns `false`~~ — RESOLVED
 
 **Location**: `State.swift`, `isEmpty` computed property.
 
@@ -556,7 +556,7 @@ Both `isEquivalent` implementations are stubs. This breaks the `Deterministic` p
 
 **Suggested implementation**: table-filling (Hopcroft-Karp) or a BFS-based equivalence check.
 
-### 15.7 `Automaton.union(list:)` is a stub
+### 15.7 ~~`Automaton.union(list:)` is a stub ~~ — RESOLVED
 
 **Location**: `Operations.swift`, `union(list:)`.
 
@@ -575,7 +575,7 @@ The commented-out block shows the intended approach (introduce a new start state
 4. Take the union of all transition sets and final sets.
 5. Propagate token maps from each component.
 
-### 15.8 `Automaton<T>` initializers strip the token map
+### 15.8 ~~`Automaton<T>` initializers strip the token map~~ — RESOLVED 
 
 **Location**: `Automaton.swift`, all three `init` overloads.
 
@@ -617,11 +617,11 @@ This entry originally described `minimize()` as a commented-out stub at the `Sta
 
 ### 15.13 Typos in identifiers and comments
 
-- File name: `FIniteStateProtocol.swift` — capital `I` in `FInite`. (Note: no file by this name exists in the current source tree; the FSA protocol now lives in `FSA.swift`. Re-verify before acting on this entry.)
-- Comment: `"autmaton"` (missing 'o') appears in several places.
-- `BerrySehti.swift` (`Construction/BerrySehti.swift`) — the algorithm name is Berry-Sethi; "Sehti" is a misspelling.
-- `ConstructionMethod.berrySethi` — inconsistently named `berrySethi` in code but `BerrySethi`/`BerrySehti` in file and type names.
-- `generateOptions` → should be `GenerateOptions` consistently.
+- ~~ File name: `FIniteStateProtocol.swift` — capital `I` in `FInite`. (Note: no file by this name exists in the current source tree; the FSA protocol now lives in `FSA.swift`. Re-verify before acting on this entry.) ~~ - RESOLVED
+- ~~ Comment: `"autmaton"` (missing 'o') appears in several places. ~~ - RESOLVED 
+- ~~ `BerrySehti.swift` (`Construction/BerrySehti.swift`) — the algorithm name is Berry-Sethi; "Sehti" is a misspelling. ~~ - RESOLVED 
+- ~~ `ConstructionMethod.berrySethi` — inconsistently named `berrySethi` in code but `BerrySethi`/`BerrySehti` in file and type names. ~~ - RESOLVED 
+- ~~`generateOptions` → should be `GenerateOptions` consistently.~~ - RESOLVED
 
 ### 15.14 Transition table representation is O(|Δ|) per lookup
 

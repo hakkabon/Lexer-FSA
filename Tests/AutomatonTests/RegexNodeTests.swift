@@ -210,7 +210,7 @@ private func assertParity(_ tree: RegexNode, sourceLocation: SourceLocation = #_
 }
 
 // MARK: - 6. The sentinel leaf vs. structural epsilon — the bug class this
-// redesign must not reintroduce. See the "Design notes" in BerrySehti.swift.
+// redesign must not reintroduce. See the "Design notes" in BerrySethi.swift.
 
 @Test func structuralEmptyContributesNoPosition() {
     // If `.empty` were ever used to model the augmented '#' sentinel
