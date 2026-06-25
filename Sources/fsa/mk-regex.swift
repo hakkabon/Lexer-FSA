@@ -7,32 +7,27 @@ import ShellOut
 extension FSATool {
     
     struct MkRegex: ParsableCommand {
-        static var configuration = CommandConfiguration(abstract: "Generate Regex from any input string.")
+        static var configuration = CommandConfiguration(abstract: "Generate Regex from any input string. Inspect internal representation or analyse string matching capabilities.")
 
         @Argument(help: "Regular Expression")
         var expression: String
         
         @Argument(help: "Sample string to match")
-//        @Option(name: [.short, .long], help: "Sample string to match")
         var match: String = ""
         
-//        enum Method: EnumerableFlag {
-//            case thompson
-//            case berrySethi
-//            static func name(for value: Method) -> NameSpecification {
-//                switch value {
-//                case .thompson: return [.short, .customLong("tho"), .long]
-//                case .berrySethi: return [.short, .customLong("ber"), .long]
-//                }
-//            }
-//        }
-
-        /// Parsing method to be applied to input supplied by user.
-        enum Construction: String, ExpressibleByArgument, CaseIterable {
-            case thompson, berrySethi, antimirov
+        /// Regex construction method to be applied to input supplied by user.
+        enum Construction: String, ExpressibleByArgument, CaseIterable, CustomStringConvertible {
+            case thom, bese, anti
+            public var description: String {
+                switch self {
+                case .anti: return "Antimirov"
+                case .bese: return "Berry-Sethi"
+                case .thom: return "Thompson"
+                }
+            }
         }
         
-        @Option(name: [.short, .long], help: "construction method") var construction: Construction = .thompson
+        @Option(name: [.short, .long], help: "construction method") var construction: Construction = .thom
         @Flag(name: [.short, .long], help: "epsilon free internal representation") var free: Bool = false
         @Flag(name: [.short, .long], help: "determinize the internal representation") var det: Bool = false
 //        @Flag(name: [.short, .long], help: "minimizes the internal representation") var min: Bool = false
@@ -48,9 +43,9 @@ extension FSATool {
                 }
                 var regex: Regex = try {
                     switch construction {
-                    case .berrySethi: return try Regex(expression, method: .berrySethi)
-                    case .thompson: return try Regex(expression, method: .thompson)
-                    case .antimirov: return try Regex(expression, method: .derivative)
+                    case .anti: return try Regex(expression, method: .derivative)
+                    case .bese: return try Regex(expression, method: .berrySethi)
+                    case .thom: return try Regex(expression, method: .thompson)
                     }
                 }()
                 

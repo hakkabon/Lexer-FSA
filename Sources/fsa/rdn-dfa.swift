@@ -7,7 +7,7 @@ import ShellOut
 extension FSATool {
     
     struct RndDFA: ParsableCommand {
-        static var configuration = CommandConfiguration(abstract: "Generate a random DFA form given options.")
+        static var configuration = CommandConfiguration(abstract: "Generate a random Deterministic Finite State Automaton (DFA) form given options.")
 
         @Option(name: [.short, .long], help: "Number of states") var states: Int = 10
         @Option(name: [.short, .long], help: "Number of final states") var finals: Int = 2
