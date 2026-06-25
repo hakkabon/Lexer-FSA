@@ -20,16 +20,16 @@ public struct GenerateOptions {
 
 /// Generator construction strategies.
 public enum Strategy {
-    case nfaStrategy(NfaConstruction)
-    case dfaStrategy(DfaConstruction)
+    case nfaStrategy(NfaStrategy)
+    case dfaStrategy(DfaStrategy)
 }
 
-public enum NfaConstruction {
+public enum NfaStrategy {
     case standard
     case simple
 }
 
-public enum DfaConstruction {
+public enum DfaStrategy {
     case bridged
     case simple
 }
