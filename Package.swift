@@ -26,7 +26,8 @@ let package = Package(
             name: "LexerFSATests",
             dependencies: [
                 "LexerFSA",
-            ]
+            ],
+            path: "Tests/AutomatonTests"
         ),
         // Move executable target to its destination when library confirmed working.
         .executableTarget(

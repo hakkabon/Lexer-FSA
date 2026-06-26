@@ -14,7 +14,7 @@ A Swift package providing a complete **Finite State Automaton** (FSA) library de
 - **NFA and DFA** — first-class, type-safe representations backed by a single `State<T>` enum
 - **Regular expressions** — compile regex strings to automata via Thompson's construction, Berry-Sethi's position automaton, or Antimirov's partial-derivative automaton
 - **Powerset (subset) construction** — determinize any NFA into an equivalent DFA, with token-class priority resolution
-- **DFA minimization** — two independent algorithms: token-class-aware Hopcroft partition refinement (`DFSA.minimize()`, in progress), and Brzozowski's double-reversal algorithm
+- **DFA minimization** — two independent algorithms: token-class-aware Hopcroft partition refinement (`DFSA.minimize()`), and Brzozowski's double-reversal algorithm
 - **Token tracking** — extended state maps final states to `TokenClass` values; designed for multi-pattern lexers
 - **DAWG / trie union** — build a minimal DFA from a set of literal strings using a Directed Acyclic Word Graph
 - **Alphabet intervals** — transitions carry compact character ranges, not flat character sets
@@ -158,12 +158,12 @@ Sources/LexerFSA/
 │   ├── FSA.swift                    # FSA protocol + default implementations
 │   ├── DFSA.swift                   # DFSA struct (deterministic automaton)
 │   ├── DFSA+Operations.swift        # Union and string-union for DFSAs
+│   ├── DFSA+Invariant.swift         # Dead-state removal, reduce, zombie cleanup
 │   ├── NFSA.swift                   # NFSA struct (nondeterministic automaton)
 │   ├── NFSA+Operations.swift        # Union convenience for NFSAs
 │   ├── State/
 │   │   ├── State.swift              # Core State<T> enum — NFA/DFA + token map
 │   │   ├── State+Union.swift        # NFA union at the State level
-│   │   ├── Invariant.swift          # Dead-state removal, reduce, zombie cleanup
 │   │   └── Graphvizable.swift       # DOT/Graphviz rendering
 │   ├── Transitions/
 │   │   ├── AlphabetRange.swift      # .epsilon / .char / .range cases
@@ -172,8 +172,7 @@ Sources/LexerFSA/
 │   ├── Determinize/
 │   │   └── Determinize.swift        # Powerset construction with token-map propagation
 │   ├── Minimize/
-│   │   ├── Minimize.swift           # Token-class-aware Hopcroft minimization
-│   │   └── BrzozowskiMinimize.swift # Double-reversal minimization
+│   │   └── Minimize.swift           # Token-class-aware Hopcroft minimization
 │   └── Generators/
 │       ├── DeterministicGenerator.swift
 │       ├── NondeterministicGenerator.swift
@@ -189,7 +188,7 @@ Sources/LexerFSA/
 │   │   └── RegularLanguage.swift    # RegularLanguageBuilder protocol, ConstructionMethod
 │   ├── Construction/
 │   │   ├── Thompson.swift           # Thompson's ε-NFA construction
-│   │   ├── BerrySehti.swift         # Berry-Sethi position automaton (direct-to-DFA)
+│   │   ├── BerrySethi.swift         # Berry-Sethi position automaton (direct-to-DFA)
 │   │   ├── Antimirov.swift          # Antimirov partial-derivative automaton + Brzozowski minimization
 │   │   └── PartialDerivative.swift  # nullable/partialDerivative/concreteAlphabet utilities
 │   ├── Minimize/
@@ -239,6 +238,8 @@ Sources/LexerFSA/
 | Empty language | `#` | matches nothing at all, not even `""` (requires `SyntaxOptions.empty`) |  
 | Escape | `\\.` | matches a literal `.` |  
 
+> A *bare* empty pattern (`Regex("")`, zero characters of regex syntax) is rejected with a `ParseError` rather than silently meaning either of the above — write `()` for ε or `#` for ∅ explicitly.
+
 ---
 
 ## Architecture Notes
@@ -275,6 +276,61 @@ The builder collects each rule as a `Regex`, unions them all into a single NFA, 
 `DFSA.minimize()` is Hopcroft's partition-refinement algorithm, written with multi-pattern lexer DFAs in mind: token-class-aware to ensure states representing different tokens are never merged.
 
 `brzozowskiMinimize(initial:finals:transitions:)` is a completely independent algorithm — reverse, determinize, reverse, determinize — reusing the package's existing NFA subset construction. It has no notion of token classes, so it always reaches the true minimum for plain acceptance.
+
+---
+
+## Command-Line Tools
+
+The `fsa` executable target (`Sources/fsa/`) wraps the library in a small `swift-argument-parser`-based CLI for poking at regexes, NFAs, DFAs, and DAWGs from the terminal — useful for sanity-checking a construction without writing a unit test first. Build and run it with:
+
+```sh
+swift build
+swift run fsa <subcommand> [arguments]
+```
+
+(Its internal help banner self-identifies as `gtool` — that's just the `CommandConfiguration.commandName` shown in `--help` text; the actual binary SwiftPM produces is `fsa`, matching the executable product's name in `Package.swift`.)
+
+### `mk-regex` (default subcommand)
+
+Compiles a regex string and lets you inspect the result. Since it's the default subcommand, you can omit the `mk-regex` keyword and just pass the expression directly.
+
+```sh
+swift run fsa "(a|b)*abb" abbabb        # is "abbabb" accepted?
+swift run fsa "(a|b)*abb" -c anti -d    # Antimirov construction, then determinize
+swift run fsa "[a-z]+" --ast            # print the flattened AST
+swift run fsa "[a-z]+" --graph          # render the NFA/DFA to PDF via Graphviz and open it
+```
+
+| Flag | Meaning |
+|---|---|
+| `-c, --construction <thom\|bese\|anti>` | Construction method: Thompson (default), Berry-Sethi, or Antimirov |
+| `-f, --free` | Convert to an ε-free internal representation |
+| `-d, --det` | Determinize the internal representation |
+| `-a, --ast` | Print the regex as a flattened (linearized) AST |
+| `-i, --internal` | Print the internal graph representation |
+| `-g, --graph` | Render to Graphviz DOT, convert to PDF, and open it |
+
+### `mk-dawg`
+
+Builds a minimal DFA (a DAWG) from a word list — either a comma-separated list given inline, or a path to a file with one word per line.
+
+```sh
+swift run fsa mk-dawg "if,else,while,for,return" --graph
+swift run fsa mk-dawg ./keywords.txt --graph
+```
+
+### `rnd-dfa` / `rnd-nfa`
+
+Generate a random DFA or NFA from a set of shape parameters, and render it to Graphviz.
+
+```sh
+swift run fsa rnd-dfa --method standard --states 10 --finals 2 --alphabet 2 --density 2
+swift run fsa rnd-nfa --method simple --states 8 --finals 1 --alphabet 2 --density 0.2
+```
+
+### Graphviz output
+
+`--graph` (and `mk-dawg`/`rnd-dfa`/`rnd-nfa`'s rendering) shells out to the `dot` command-line tool (from [Graphviz](https://graphviz.org)) to convert the generated DOT source into `parse-tree.pdf` in the current directory, then opens it. `dot` must be installed and on your `PATH` (e.g. `brew install graphviz` on macOS). The "open the PDF" step uses the macOS `open` command specifically — on Linux, `parse-tree.pdf` is still generated correctly, but that last step will fail; open the file yourself instead.
 
 ---
 

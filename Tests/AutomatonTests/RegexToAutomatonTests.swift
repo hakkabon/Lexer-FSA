@@ -2,17 +2,21 @@ import Testing
 @testable import LexerFSA
 
 
-@Test(.disabled("distinction between empty language and epsilon"))
+@Test
 func testNilString() throws {
     let a = try Regex.nondeterministicFiniteState(Regex("#", method: .thompson, flags: .all))   // empty language
     try #require(a.isEmpty)
 }
 
-@Test(.disabled("distinction between empty language and epsilon"))
+@Test("Empty source string is rejected rather than silently meaning ε or ∅")
 func testEmptyString() throws {
-    let a = try Regex.nondeterministicFiniteState(Regex(""))
-    print("\(a)")
-    try #require(a.isEmpty)
+    // A bare empty pattern is ambiguous -- does the caller mean the empty
+    // string (ε, spelled `()`), the empty language (∅, spelled `#` when the
+    // `.empty` flag is enabled), or did they simply forget to supply a
+    // pattern? Rather than guessing, the parser rejects it outright.
+    #expect(throws: Regex.RegexParser.ParseError.self) {
+        _ = try Regex("")
+    }
 }
 
 @Test("testSimpleString")

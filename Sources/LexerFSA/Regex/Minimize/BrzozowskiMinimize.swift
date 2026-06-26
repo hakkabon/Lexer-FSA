@@ -1,5 +1,5 @@
 //
-//  BorzowskiMinimize.swift
+//  BrzozowskiMinimize.swift
 //  lexer-fsa
 //
 //  Created by Ulf Akerstedt-Inoue on 2026/06/22.

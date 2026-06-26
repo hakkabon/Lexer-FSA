@@ -71,6 +71,9 @@ extension Regex {
             case intervalSyntaxError(Int)
             case illegalIdentifier(Character,Int)
             case illegalSyntax(Int)
+            /// The input ended while the parser still expected more characters
+            /// (e.g. an unclosed group, character class, string, or interval).
+            case unexpectedEndOfInput(Int)
         }
 
         /// The source code as a list of characters that is read one by one from start to end.
@@ -179,7 +182,10 @@ extension Regex {
                 else if match("{") {
                     var start = index
                     let number = parse(while: { "0123456789".contains($0) })
-                    if start == index { throw ParseError.expectedInteger(current, count(before: index)) }
+                    if start == index {
+                        if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
+                        throw ParseError.expectedInteger(current, count(before: index))
+                    }
                     let n = Int(number) ?? 0
                     var m = -1
                     if match(",") {
@@ -189,7 +195,10 @@ extension Regex {
                     } else {
                         m = n
                     }
-                    if !match("}") { throw ParseError.unexpectedCharacter("}", current, count(before: index)) }
+                    if !match("}") {
+                        if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
+                        throw ParseError.unexpectedCharacter("}", current, count(before: index))
+                    }
                     if m == -1 { e = .repeatMin(e, n) }
                     else { e = .repeatMinMax(e, n, m) }
                 }
@@ -201,7 +210,10 @@ extension Regex {
             if match("[") {
                 let negate = match("^")
                 let e = try parseCharClasses()
-                if !match("]") { throw ParseError.unexpectedCharacter("]", current, count(before: index)) }
+                if !match("]") {
+                    if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
+                    throw ParseError.unexpectedCharacter("]", current, count(before: index))
+                }
                 // Let the backend handle the negation of these specific characters
 //                return negate ? .negatedClass(e) : e      //
                 return e                                    // remove this when .negatedClass() implemented
@@ -230,20 +242,29 @@ extension Regex {
             if match(".") { return .anyChar }
             else if flags.contains(.empty) && match("#") { return .empty }
             else if flags.contains(.anyString) && match("@") { return .anyString }
-            else if match("'") {
+            else if match("\"") {
                 let start = index
-                _ = parse(while: { !"'".contains($0) })
-                if !match("'") { throw ParseError.unexpectedCharacter("'", current, count(before: index)) }
+                _ = parse(while: { $0 != "\"" })
+                if !match("\"") {
+                    if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
+                    throw ParseError.unexpectedCharacter("\"", current, count(before: index))
+                }
                 return .string(String(string[start..<index]))
             } else if match("(") {
                 if match(")") { return .string("") }
                 let e = try parseUnion()
-                if !match(")") { throw ParseError.unexpectedCharacter(")", current, count(before: index)) }
+                if !match(")") {
+                    if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
+                    throw ParseError.unexpectedCharacter(")", current, count(before: index))
+                }
                 return e
             } else if (flags.contains(.automaton) || flags.contains(.interval)) && match("<") {
                 let start = index
                 _ = parse(while: { !">".contains($0) })
-                if !match(">") { throw ParseError.unexpectedCharacter(">", current, count(before: index)) }
+                if !match(">") {
+                    if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
+                    throw ParseError.unexpectedCharacter(">", current, count(before: index))
+                }
                 let s = String(string[start..<string.index(before: index)])
                 if let i = s.firstIndex(of: "-") {
                     if !flags.contains(.interval) { throw ParseError.illegalIdentifier("-", count(before: index)-1) }
@@ -270,6 +291,7 @@ extension Regex {
                     return.string(s)
                 }
             }
+            if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
             return try .char(parseCharExp())
         }
 
@@ -282,6 +304,7 @@ extension Regex {
 
         mutating func parseCharExp() throws -> Character {
             if match("\\") {
+                if !more { throw ParseError.unexpectedEndOfInput(count(before: index)) }
                 let c = parseAny()
                 switch c {
                 case "n": return "\n"

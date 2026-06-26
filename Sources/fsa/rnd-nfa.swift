@@ -20,7 +20,7 @@ extension FSATool {
             }
         }
 
-        @Option(name: [.short, .long], help: "construction method") var metod: Method = .standard
+        @Option(name: [.short, .long], help: "construction method") var method: Method = .standard
         @Option(name: [.short, .long], help: "Number of states") var states: Int = 8
         @Option(name: [.short, .long], help: "Number of final states") var finals: Int = 1
         @Option(name: [.short, .long], help: "Number of transition symbols") var alphabet: Int = 2
@@ -28,7 +28,7 @@ extension FSATool {
         
         mutating func run() throws {
             var options = GenerateOptions()
-            options.strategy = .nfaStrategy(metod.conversion)
+            options.strategy = .nfaStrategy(method.conversion)
             options.states = states
             options.finals = finals
             options.symbols = alphabet

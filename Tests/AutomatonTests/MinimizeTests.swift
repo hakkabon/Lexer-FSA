@@ -10,7 +10,7 @@
 //  2. Token-class partitioning prevents merging states with DIFFERENT token classes
 //  3. Token-class partitioning still allows merging states with the SAME token class
 //  4. A realistic keyword-vs-identifier conflict (the classic scanner example)
-//  5. A documented, currently-failing-to-minimize-correctly case (see issue below)
+//  5. A regression test for a previously-known minimization bug, now fixed (see below)
 
 import Testing
 @testable import LexerFSA
@@ -162,33 +162,31 @@ struct MinimizeKeywordIdentifierTests {
 
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MARK: - 3. Known issue: untagged accepting states never merge
+// MARK: - 3. Regression: untagged accepting states ARE merged when equivalent
 // ──────────────────────────────────────────────────────────────────────────────
 
-@Suite("Minimize — Known Issues")
+@Suite("Minimize — Regression Tests")
 struct MinimizeKnownIssueTests {
 
-    /// KNOWN BUG (found while writing this suite — not previously documented):
-    /// `Minimize.swift` puts every accepting state *without* a `TokenClass*
-    /// into its own singleton partition block:
+    /// FIXED: `Minimize.swift` used to put every accepting state *without* a
+    /// `TokenClass` into its own singleton partition block:
     ///
     ///     } else {
     ///         partitions.insert([s])   // one block PER untagged state
     ///     }
     ///
     /// Hopcroft's algorithm only ever splits blocks, never merges them, so
-    /// two ordinary, language-equivalent, untagged accepting states can
-    /// never be merged — i.e. plain (non-lexer) DFA minimization is
-    /// effectively a no-op for accepting states. `isMinimal` is still set
-    /// to `true` afterward, which is misleading.
+    /// two ordinary, language-equivalent, untagged accepting states could
+    /// never be merged -- i.e. plain (non-lexer) DFA minimization was
+    /// effectively a no-op for accepting states.
     ///
-    /// This test documents the CURRENT (incorrect) behavior. Once fixed —
-    /// by grouping all untagged accepting states into ONE shared block,
-    /// mirroring how non-accepting states are already handled — flip the
-    /// expectation below to `dfa.stateCount == 2`.
-    @Test func equivalentAcceptingStatesWithoutTokenClassesAreNotMerged_knownBug() {
+    /// The fix groups all untagged accepting states into ONE shared initial
+    /// block, mirroring how non-accepting states are already handled, so
+    /// refinement can still split them apart when they're genuinely
+    /// distinguishable, but is free to leave them merged when they're not.
+    @Test func equivalentAcceptingStatesWithoutTokenClassesAreMerged() {
         // DFA for `a|b`: states 1 and 2 are both accepting dead ends with
-        // no TokenClass tagged at all — textbook-minimal would merge them.
+        // no TokenClass tagged at all — textbook-minimal merges them.
         var dfa = DFSA(
             initial: 0,
             finals: [1, 2],
@@ -201,12 +199,10 @@ struct MinimizeKnownIssueTests {
         dfa.minimize()
 
         // Mathematically minimal is 2 states (0, and merged {1,2}).
-        // Current implementation leaves all 3 in place.
-        #expect(dfa.stateCount == 3, "documents the known singleton-block bug — see comment above")
-        #expect(dfa.isMinimal == true, "flag is set even though the result is not actually minimal")
+        #expect(dfa.stateCount == 2)
+        #expect(dfa.isMinimal == true)
 
-        // Recognition still works correctly post-"minimization" — the bug
-        // only costs you state-count efficiency, not correctness of `run`.
+        // Recognition still works correctly post-minimization.
         #expect(dfa.run(string: "a") == true)
         #expect(dfa.run(string: "b") == true)
         #expect(dfa.run(string: "c") == false)

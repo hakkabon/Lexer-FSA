@@ -1,15 +1,9 @@
 import Testing
 @testable import LexerFSA
 
-// This construct is not implemented!
-//@Test
-//func testEmpty() async throws {
-//    for mode in [false, true] {
-//        let automaton = try Regex("")
-//        #expect(automaton.test("", deterministic: mode), "should accept empty string")
-//        #expect(automaton.test("0", deterministic: mode) == false)
-//    }
-//}
+// A bare empty pattern (`Regex("")`) is intentionally rejected as invalid
+// syntax rather than treated as ε -- see `RegexToAutomatonTests.testEmptyString`
+// for the test that locks this in, and its comment for the reasoning.
 
 @Test
 func testSingleLiteral() async throws {
@@ -122,4 +116,81 @@ func testExampleDragonRegex() async throws {
     #expect(re.recognize(string: "aabb"), "valid lexeme '(a|b)*abb'")
     #expect(re.recognize(string: "babb"), "valid lexeme '(a|b)*abb'")
     #expect(re.recognize(string: "aaaabbbbbbabbaabb"), "valid lexeme '(a|b)*abb'")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MARK: - Regression: bounded {n,m} quantifier (Thompson construction)
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// `repeatMinMax` previously discarded its `n` mandatory copies whenever
+// `m > n` and built `(m-n)` *mandatory* copies plus a single trailing
+// optional copy instead of `(m-n)` independently-optional copies — i.e.
+// `a{2,4}` behaved like "at least 3, at most 4" rather than "2 to 4".
+
+@Test
+func testBoundedRepeatExact() async throws {
+    // a{2,2} == exactly two a's.
+    let re = try Regex("a{2,2}")
+    #expect(re.recognize(string: "aa"))
+    #expect(re.recognize(string: "a") == false)
+    #expect(re.recognize(string: "aaa") == false)
+    #expect(re.recognize(string: "") == false)
+}
+
+@Test
+func testBoundedRepeatRange() async throws {
+    // a{2,4} == two to four a's, inclusive.
+    let re = try Regex("a{2,4}")
+    #expect(re.recognize(string: "a") == false)
+    #expect(re.recognize(string: "aa"))
+    #expect(re.recognize(string: "aaa"))
+    #expect(re.recognize(string: "aaaa"))
+    #expect(re.recognize(string: "aaaaa") == false)
+}
+
+@Test
+func testBoundedRepeatZeroToM() async throws {
+    // a{0,2} == zero to two a's, inclusive (exercises the n == 0 base case).
+    let re = try Regex("a{0,2}")
+    #expect(re.recognize(string: ""))
+    #expect(re.recognize(string: "a"))
+    #expect(re.recognize(string: "aa"))
+    #expect(re.recognize(string: "aaa") == false)
+}
+
+@Test
+func testBoundedRepeatExactlyZero() async throws {
+    // a{0,0} == exactly zero a's, i.e. only the empty string.
+    let re = try Regex("a{0,0}")
+    #expect(re.recognize(string: ""))
+    #expect(re.recognize(string: "a") == false)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MARK: - Regression: numerical intervals (Thompson construction)
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// `makeInterval` was a stub: it computed the padded min/max strings and then
+// discarded them, returning a two-state placeholder with no transitions
+// between them -- the empty-language shape -- regardless of the requested
+// bounds, so a Thompson-built interval pattern never matched anything.
+
+@Test
+func testIntervalRecognition() async throws {
+    let re = try Regex("<1-100>", flags: .all)
+    #expect(re.recognize(string: "1"))
+    #expect(re.recognize(string: "50"))
+    #expect(re.recognize(string: "100"))
+    #expect(re.recognize(string: "0") == false)
+    #expect(re.recognize(string: "101") == false)
+}
+
+@Test
+func testPaddedIntervalRecognition() async throws {
+    let re = try Regex("<001-100>", flags: .all)
+    #expect(re.recognize(string: "001"))
+    #expect(re.recognize(string: "050"))
+    #expect(re.recognize(string: "100"))
+    // Unpadded form should no longer match once padding is required.
+    #expect(re.recognize(string: "1") == false)
 }

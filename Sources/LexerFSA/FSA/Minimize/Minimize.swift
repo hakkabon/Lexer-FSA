@@ -42,14 +42,19 @@ extension DFSA {
         if !nonAccepting.isEmpty { partitions.append(nonAccepting) }
 
         var tokenGroups: [TokenClass: Set<Int>] = [:]
+        var untaggedAccepting = Set<Int>()
         for s in finals {
             if let token = tokenMap[s] {
                 tokenGroups[token, default: []].insert(s)
             } else {
-                // Accepting state with no token class gets its own singleton block.
-                partitions.append([s])
+                untaggedAccepting.insert(s)
             }
         }
+        // All untagged accepting states share ONE initial block (just like the
+        // non-accepting states above), so refinement can still split them apart
+        // if they're actually distinguishable, but two of them that are truly
+        // language-equivalent are free to end up merged together.
+        if !untaggedAccepting.isEmpty { partitions.append(untaggedAccepting) }
         // Sort token groups by token id so partition order is stable.
         for (_, group) in tokenGroups.sorted(by: { $0.key.id < $1.key.id }) {
             partitions.append(group)

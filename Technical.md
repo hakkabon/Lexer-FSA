@@ -401,6 +401,60 @@ Merges overlapping or adjacent character-range transitions with the same source 
 
 This keeps the transition set in its most compact form after construction operations.
 
+### Where should `invariant()` run?
+
+None of `removeZombieAcceptStates()`, `eliminateDeadStates()`, `removeDeadTransitions()`, `reduce()`,
+or the bundled `invariant()` itself are currently called anywhere in the construction pipeline — they're
+implemented and unit-tested in isolation, but every entry point (`Thompson.construct()`,
+`BerrySethi.construct()`, `Antimirov.construct()`, `determinize()`, `minimize()`) hands back its raw
+result without ever invoking them. That's worth fixing deliberately rather than by blanket-calling
+`invariant()` everywhere, because the four passes aren't equally appropriate at every point in an
+automaton's lifetime:
+
+1. **Right after raw NFA/DFA construction (Thompson / BerrySethi / Antimirov), before the result is
+   handed back to the caller.** This is where `removeZombieAcceptStates()` earns its keep. The `#`
+   (empty-language) construction is a legitimate example: its whole point is a final state that is
+   *deliberately* unreachable, so the raw construction is exactly the kind of place a zombie final state
+   can show up by design, not just by accident. (This audit found and fixed the one concrete case of that —
+   see "Known issues" below — by having `Thompson.construct()` not emit the zombie final state in the
+   first place, which is preferable to constructing it and immediately stripping it back out. But the next
+   construction method, or the next bug in this one, won't necessarily get that same care, so running
+   `removeZombieAcceptStates()` here as a safety net is still worthwhile defense in depth.) `eliminateDeadStates()`
+   is mostly redundant here for NFAs built bottom-up by these particular algorithms (they only ever wire up
+   states they just created, so there's nothing unreachable to prune) — but it's cheap insurance against a
+   future construction method that doesn't have that property.
+
+2. **Right after `determinize()`.** The powerset construction only ever visits state-sets reachable from
+   the initial closure, so `eliminateDeadStates()` is a guaranteed no-op here. `reduce()`, on the other hand,
+   is genuinely valuable at exactly this point: subset construction commonly produces several adjacent or
+   overlapping `.range` transitions out of the same DFA state (one per equivalence class that happened to
+   land on the same target), and `reduce()` is precisely the pass that coalesces those into the fewest
+   possible wide ranges. Since `determinize()`'s result is by definition already a `DFSA`, calling the full
+   `invariant()` bundle here (not just `reduce()` in isolation) is the natural choice — `removeZombieAcceptStates()`
+   and `eliminateDeadStates()` are cheap no-ops on a determinize() result, and `removeDeadTransitions()` will
+   still usefully prune any trap states inherited from a source NFA that itself had dead branches.
+
+3. **Right before `minimize()` partitions.** Hopcroft's refinement assumes every state it's handed is
+   pulling its weight; a dead/trap state sitting in the initial "non-accepting" block doesn't *break*
+   the algorithm, but it does waste partition-refinement work and can leave the "minimized" result larger
+   than the true Myhill-Nerode minimum if the input DFA wasn't already dead-state-free. Calling
+   `eliminateDeadStates()` + `removeDeadTransitions()` as the very first thing `minimize()` does — before
+   building the initial partition — guards against that regardless of how the DFA arrived (hand-built,
+   deserialized, or freshly determinized).
+
+4. **After any manual editing of states/transitions** (constructing a `DFSA`/`NFSA` directly through its
+   memberwise initializer, or a hypothetical "load from a serialized/DOT representation" feature). This is
+   the case the existing header comment in `DFSA+Invariant.swift` already calls out, and it's the one case
+   where the library genuinely can't apply the fix automatically — there's no single call site to intercept,
+   since the caller is bypassing the construction/transformation API entirely. The right answer there is
+   simply: call `invariant()` yourself afterward, the way the doc comment already says.
+
+In short: (1) and (4) are about a *single construction method* not handing back a state that violates its
+own invariants, so those are best fixed in the specific construction code (as this audit did for Thompson's
+`#` case) rather than papered over by always running cleanup afterward. (2) and (3) are about *transformations*
+(`determinize()`, `minimize()`) that take an already-valid automaton as input and should leave the result at
+least as clean as it found it — those are the two automatic call sites this report recommends wiring in.
+
 ---
 
 ## 11. Extended State — Token Tracking
@@ -677,4 +731,59 @@ This entry originally described `minimize()` as a commented-out stub at the `Sta
 ### 15.14 Transition table representation is O(|Δ|) per lookup
 
 All step functions iterate over `Set<Transition>` filtered by source state. For automata with hundreds of states and a large alphabet, this is O(|Δ|) per character. A nested dictionary `[Int: [Character: Int]]` (state → symbol → target) would reduce DFA simulation to O(1) amortized per character, at the cost of higher memory usage. A two-level array `[[Int]]` indexed by renumbered states and alphabet positions is the classic representation and would also improve cache locality.
-```
+
+### 15.15 ~~`RegexParser` crashes instead of throwing on truncated/malformed input~~ — RESOLVED
+
+**Location**: `Regex/Parsing/RegexParser.swift`.
+
+`current` is a computed property guarded by `assert(self.index < string.endIndex)`. Several call sites — the `{n,m}` quantifier's "did we find a digit" / "did we find the closing brace" checks, the unclosed-`[...]`, unclosed-`(...)`, and unclosed-`<...>` checks, the string-literal closing-delimiter check, and `parseSimpleExpression`'s final char-expression fallback — accessed `current` to build an error message *after* a failed `match()`, without first checking whether input remained (`more`). For any pattern that runs out of input exactly at one of these points (`"a{"`, `"[a-z"`, `"<10-20"`, `"a|("`, an unterminated string), this asserted/crashed instead of throwing a `ParseError`, which is why the `RegexParsingDifficultTests.parserErrors` stress test was disabled.
+
+**Fix**: added a new `ParseError.unexpectedEndOfInput(Int)` case, and every such call site now checks `more` first and throws that case instead of touching `current` when input is exhausted. The disabled test is re-enabled.
+
+As a related fix in the same file: the string-literal delimiter was `'...'` (single quote) in the implementation but documented (and escape-handled, via the `\"` case in `parseCharExp`) as `"..."` (double quote) — the grammar comment at the top of the file has always said `" <Unicode string> "`. The delimiter now matches the documented grammar.
+
+### 15.16 ~~Thompson's `empty()` conflates the empty language (∅) with the empty string (ε)~~ — RESOLVED
+
+**Location**: `Regex/Construction/Thompson.swift`.
+
+`empty()` built a single-state automaton (`start == terminal`, no transitions) and was used for *both* `case .empty: return empty()` (compiling the `#` / empty-language syntax) *and* as the zero-repetitions base case inside `repeatMinMax`. A single-state automaton with no transitions, where that one state is both initial and final, accepts exactly `{ε}` — correct for the second use, wrong for the first: every other construction method in the codebase (`nullable(.empty)` in `PartialDerivative.swift`, the `'#' sentinel` check in `BerrySethi.swift`) treats `Expression.empty` as ∅ (matches nothing, not even ε), consistent with the regex grammar's own documentation of `#`.
+
+**Fix**: split into two functions — `epsilon()` (the old behaviour, kept for the `repeatMinMax` base case) and `emptyLanguage()` (a genuinely disjoint start/terminal pair with no transitions between them, so the terminal is unreachable and the automaton's language is truly ∅). `Thompson.compile()`'s `.empty` case now calls `emptyLanguage()`.
+
+A disjoint, unreachable terminal state still gets wrapped into `finals` by `construct()`'s `Set<Int>([enfa.1])`, though, which would make the result a "zombie final state" automaton rather than a clean `finals: []` one. `construct()` was adjusted to only include the terminal in `finals` when it's actually reachable (`enfa.1 == enfa.0`, the ε case, or `enfa.2.states().contains(enfa.1)`, the normal case) — see §10 ("Where should `invariant()` run?") for why this was fixed locally rather than by calling `removeZombieAcceptStates()` after the fact.
+
+The two disabled tests in `RegexToAutomatonTests.swift` (`testNilString`, `testEmptyString`) are re-enabled — the former now passes outright, the latter was rewritten to lock in a deliberate decision (see 15.18 below) rather than testing the ∅/ε distinction directly.
+
+### 15.17 ~~Thompson's `repeatMinMax` (`{n,m}`) builds the wrong automaton~~ — RESOLVED
+
+**Location**: `Regex/Construction/Thompson.swift`, `repeatMinMax(automaton:n:m:)`.
+
+The previous implementation built `n` mandatory copies plus a `repeat()` (Kleene star) in one branch, then *unconditionally overwrote* that list — discarding the mandatory copies — with `(m-n)` mandatory copies plus a single trailing `optional()` whenever `m > n`. For `a{2,4}` this compiled to `a·a·a·a?` ("at least 3, at most 4 a's") instead of `a·a·a?·a?` ("2 to 4 a's"); for `a{0,3}` it discarded the empty/epsilon base case entirely and compiled to `a·a·a·a?` ("at least 3"), accepting nothing in the intended 0–3 range. Crucially, no existing test exercised actual *recognition* against a bounded quantifier (`RegexCompileTests.swift`'s `testSomething3`/`testSomething4` only check the re-rendered AST string), so this shipped silently.
+
+**Fix**: rewritten to match the already-correct `expandRepeatMinMax` in `Expression+Desugar.swift` (used by BerrySethi/Antimirov): `n` mandatory copies followed by `(m-n)` *independently* `optional()` copies, concatenated together, with the `n == m == 0` case falling back to `epsilon()`. New recognition tests (`testBoundedRepeatExact`, `testBoundedRepeatRange`, `testBoundedRepeatZeroToM`, `testBoundedRepeatExactlyZero` in `RegexRunTests.swift`) cover this going forward.
+
+### 15.18 ~~Thompson's `makeInterval` is an unimplemented stub~~ — RESOLVED
+
+**Location**: `Regex/Construction/Thompson.swift`, `makeInterval(min:max:digits:)`.
+
+The implementation computed the zero-padded `min`/`max` strings, assigned them to `_` (discarding them), and returned `ThompsonAutomata(state(), state(), Set<Transition>())` — two fresh, disjoint states with no transitions between them, unconditionally. That shape is exactly the empty-language automaton (see 15.16): a Thompson-constructed numerical interval like `<1-100>` matched nothing at all, regardless of the requested bounds. No existing test caught this because the only interval coverage (`RegexCompileTests.swift`'s `testSomething2`) checks the AST's `description`, not recognition, and no other construction method shares this code path (Antimirov/BerrySethi instead go through the already-correct `expandInterval` in `Expression+Desugar.swift`).
+
+**Fix**: implemented properly — builds one string-literal automaton per value in `min...max` (padded to `digits` width when padding was requested, mirroring `expandInterval`'s own logic), and unions them all together. New recognition tests (`testIntervalRecognition`, `testPaddedIntervalRecognition` in `RegexRunTests.swift`) cover this going forward.
+
+This is also the resolution referenced in 15.16 for `testEmptyString`: rather than guessing whether a bare, zero-character pattern (`Regex("")`) should mean ε or ∅, the parser now rejects it outright as invalid syntax (`ParseError.unexpectedEndOfInput`, via 15.15's fix) — callers write `()` for ε or `#` for ∅ explicitly. `RegexToAutomatonTests.testEmptyString` and a stale, contradictory commented-out test in `RegexRunTests.swift` (which had wanted the opposite behaviour, and was marked "not implemented") are both updated to reflect this.
+
+### 15.19 ~~`Minimize.swift` never merges untagged accepting states~~ — RESOLVED
+
+**Location**: `FSA/Minimize/Minimize.swift`, the initial-partition construction inside `minimize()`.
+
+Every accepting state without a `TokenClass` was placed into its own singleton partition block (`partitions.append([s])`, once per state) rather than one shared block. Hopcroft's algorithm only ever *splits* blocks during refinement, never merges them, so two accepting states that don't carry a token class — i.e. plain, non-lexer DFA minimization — could never be merged even when they were genuinely language-equivalent. `isMinimal` was still set to `true` afterward despite the result not being minimal.
+
+**Fix**: untagged accepting states are now collected into one shared initial block, exactly mirroring how non-accepting states are already handled; refinement is still free to split the block apart for states that are actually distinguishable. `MinimizeTests.swift`'s `equivalentAcceptingStatesWithoutTokenClassesAreMerged` (previously documenting the bug as `..._knownBug`) is updated to lock in the corrected behaviour.
+
+### 15.20 ~~`Package.swift`'s test target can't find its own sources~~ — RESOLVED
+
+**Location**: `Package.swift`, the `.testTarget(name: "LexerFSATests", ...)` declaration.
+
+SwiftPM resolves a target's source directory by convention — `Tests/<target name>/` — unless an explicit `path:` is given. The manifest declared the test target as `LexerFSATests` with no `path:` override, but the actual test sources live under `Tests/AutomatonTests/` (presumably left over from an earlier test-target rename that didn't update the manifest to match). Building or testing this package from the command line (`swift build` / `swift test`) should fail outright at package-graph resolution, before any of this catalogue's other issues even get a chance to matter; Xcode hits the identical resolution logic, so it isn't a command-line-only problem.
+
+**Fix**: added `path: "Tests/AutomatonTests"` to the test target declaration.

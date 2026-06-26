@@ -53,7 +53,7 @@ extension Regex {
             case .anyString: return anyString()
             case let .interval(min,max,digits):
                 return try makeInterval(min: min, max: max, digits: digits)
-            case .empty: return empty()
+            case .empty: return emptyLanguage()
             }
         }
         
@@ -64,7 +64,14 @@ extension Regex {
         mutating func construct() throws -> State<Regex> {
             self.expression = try parser.parse()
             let enfa = try compile(self.expression)
-            return .nfa(initial: enfa.0, finals: Set<Int>([enfa.1]), transitions: enfa.2, tokenMap: [:])
+            // The terminal state is only genuinely accepting if it's reachable:
+            // either it *is* the initial state (the ε / zero-length-path case,
+            // e.g. `epsilon()`), or some transition actually reaches it. The
+            // `#` / empty-language construction (`emptyLanguage()`) deliberately
+            // produces a terminal state with neither property, since its whole
+            // point is to be unreachable.
+            let finals: Set<Int> = (enfa.1 == enfa.0 || enfa.2.states().contains(enfa.1)) ? [enfa.1] : []
+            return .nfa(initial: enfa.0, finals: finals, transitions: enfa.2, tokenMap: [:])
         }
         
         /// Concatenation of two ϵ-NFAs (e1 e2).
@@ -200,36 +207,48 @@ extension Regex {
         /// Implements the regular expresion `A{n,m}`, an automaton that repeats at least n times
         /// and at most m times.
         /// The expression `A{n,m}` is rewritten in terms of already known constructs
-        ///     A1 A2 ... An A1? A2? ... Am-n?, where n < m, n > 0
+        ///     A1 A2 ... An A1? A2? ... A(m-n)?, where 0 <= n <= m
+        /// (the n == m == 0 case is the empty string, ε).
         /// - Parameters:
         ///   - automaton: ϵ-NFA automaton
         ///   - min: lower bound of repeat counter
-        ///   - max: upper bound of repeat counter, where min < max, min > 0
+        ///   - max: upper bound of repeat counter, where min <= max, min >= 0
         /// - Returns: repeated automata with new start and terminal state.
         func repeatMinMax(automaton: ThompsonAutomata, n: Int, m: Int) throws -> ThompsonAutomata {
             guard n <= m else { throw RegexError.illegalIntervalBounds(n,m) }
 
-            let opt = m-n
             var list: [ThompsonAutomata] = []
-            switch n {
-            case 0:
-                list.append( empty() )
-            default:
-                list = Array(repeating: automaton, count: n)
-                list.append(`repeat`(automaton: automaton))
+            if n > 0 {
+                list.append(contentsOf: Array(repeating: automaton, count: n))
             }
+            let opt = m - n
             if opt > 0 {
-                list = Array(repeating: automaton, count: opt)
-                list.append(optional(automaton: automaton))
+                list.append(contentsOf: Array(repeating: optional(automaton: automaton), count: opt))
+            }
+            if list.isEmpty {
+                // n == 0 and m == 0: exactly zero repetitions, i.e. the empty string (ε).
+                list.append(epsilon())
             }
             return concat(automata: list)
         }
         
-        /// Creates a new (deterministic) automaton that accepts only the empty string.
-        /// - Returns: Automaton accepting the specified language.
-        func empty() -> ThompsonAutomata {
+        /// Creates a new (deterministic) automaton that accepts only the empty string (ε).
+        /// Used as the concatenation identity, e.g. as the base case for `A{0,0}`.
+        /// - Returns: Automaton accepting the language {ε}.
+        func epsilon() -> ThompsonAutomata {
             let v = state()
             return ThompsonAutomata(v, v, Set<Transition>())
+        }
+
+        /// Creates a new automaton that accepts the empty *language* (∅) — i.e. no
+        /// string at all, not even ε. Used to compile the `#` syntax (`Expression.empty`).
+        /// The start and terminal states are deliberately distinct and have no transition
+        /// between them, so the terminal (and thus the sole final state) is unreachable.
+        /// - Returns: Automaton accepting the language ∅.
+        func emptyLanguage() -> ThompsonAutomata {
+            let start = state()
+            let terminal = state()
+            return ThompsonAutomata(start, terminal, Set<Transition>())
         }
         
         /// Creates a new (deterministic) automaton that accepts the given string.
@@ -318,16 +337,26 @@ extension Regex {
         ///   with the given fixed number of digits
         func makeInterval(min: Int, max: Int, digits: Int) throws -> ThompsonAutomata {
             guard min <= max else { throw RegexError.illegalInterval(min, max, "malformed interval.") }
-            let x = String(min)
             let y = String(max)
             if digits > 0 && y.count > digits {
                 throw RegexError.illegalInterval(min, max, "number cannot be expressed with the given number of digits.")
             }
-            let d = digits > 0 ? digits : y.count
-            var /*xstr*/ _ = x.leftPadding(toLength: d, withPad: "0")
-            var /*ystr*/ _ = y.leftPadding(toLength: d, withPad: "0")
-            
-            return ThompsonAutomata(state(), state(), Set<Transition>())
+
+            // Build one string-literal automaton per value in the interval,
+            // padded to `digits` width when padding was requested (mirrors
+            // `expandInterval(lo:hi:digits:)` in Expression+Desugar.swift,
+            // which Antimirov/BerrySethi use for the same purpose), then
+            // union them all together.
+            var automata: [ThompsonAutomata] = []
+            for n in min...max {
+                let s = digits > 0 ? String(n).leftPadding(toLength: digits, withPad: "0") : String(n)
+                automata.append(string(s: s))
+            }
+            guard var result = automata.first else { return emptyLanguage() }
+            for automaton in automata.dropFirst() {
+                result = union(automaton: result, with: automaton)
+            }
+            return result
         }
     }
 }

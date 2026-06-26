@@ -17,9 +17,16 @@ import os.log
 /// If an automaton is nondeterministic, then isDeterministic() returns false (but the converse is not required).
 /// Automata provided as input to operations are generally assumed to be disjoint.
 ///
-/// If the states or transitions are manipulated manually, then the *restoreInvariant()* and
-/// *setDeterministic(boolean)* methods should be used afterwards to preserve representation invariants
-/// that are assumed by the built-in automata operations.
+/// If the states or transitions are manipulated manually, then *invariant()* should be called
+/// afterwards to restore the representation invariants assumed by the built-in automata operations.
+/// `invariant()` is declared on `Deterministic` (i.e. it's available on `DFSA`, not `NFSA`) because
+/// its last step, `reduce()`, only makes sense for a deterministic automaton; the other three steps
+/// it bundles -- `removeZombieAcceptStates()`, `eliminateDeadStates()`, `removeDeadTransitions()` --
+/// are declared on the more general `FSA` extension below and can be called individually on an NFA.
+///
+/// None of these are currently called automatically anywhere in the construction pipeline (Thompson /
+/// BerrySethi / Antimirov / `determinize()` / `minimize()`) -- see Technical.md "Where should
+/// `invariant()` run?" for a discussion of where they would be most useful to wire in.
 
 extension FSA {
 
