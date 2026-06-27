@@ -95,6 +95,7 @@ struct NFAUnionTests {
 
         let u1 = NFSA.union(a, b)
         let u2 = NFSA.union(a, b)
+        // the order of output differs, otherwise same data
         #expect(u1.description == u2.description)
     }
 }
