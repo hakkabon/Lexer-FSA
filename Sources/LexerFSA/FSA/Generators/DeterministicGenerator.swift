@@ -8,8 +8,12 @@
 
 import Foundation
 
-//extension State where T == DFSA {
+// --------------------------------------------------------------
+// MARK: - Default Implementations (Idiomatic Swift)
+// --------------------------------------------------------------
+
 extension Deterministic {
+    
     /// Generate a random DFA using the bridge-based strategy
     /// This ensures:
     /// - All states are reachable from initial states

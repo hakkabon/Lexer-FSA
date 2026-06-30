@@ -203,6 +203,7 @@ public protocol Nondeterministic : FSA {
     // MARK: - Factory Methods
 
     /// Returns a randomly created Nondeterministic Finit Automaton.
+    /// Nondeterministic provides a default implementations.
     static func generate(with options: GenerateOptions) -> Subtype
 }
 
@@ -255,6 +256,7 @@ public protocol Deterministic : FSA {
     // MARK: - Factory Methods
 
     /// Returns a randomly created Deterministic Finit Automaton.
+    /// Deterministic provides a default implementations.
     static func generate(with options: GenerateOptions) -> Subtype
 }
 

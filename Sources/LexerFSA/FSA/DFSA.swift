@@ -197,19 +197,6 @@ extension DFSA: Deterministic {
     public func reachableStates(from source: Int) -> Set<Int> {
         return self.state.reachableStates(from: source)
     }
-
-    /// Generates a new automaton instance based on the provided configuration options.
-    /// Generate a random DFA using the bridge-based strategy
-    /// This ensures:
-    /// - All states are reachable from initial states
-    /// - All states can reach final states
-    /// - Exactly one transition per (state, symbol) pair
-    ///
-    /// - Parameter options: A `GenerateOptions` object specifying the configuration and constraints for the automaton generation.
-    /// - Returns: A new instance of type `T` (the Automaton).
-//    public static func generate(with options: GenerateOptions) -> Self {
-//        return state.generate(with: options)
-//    }
 }
 
 // MARK: - CustomStringConvertible Conformance

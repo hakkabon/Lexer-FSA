@@ -8,8 +8,10 @@
 
 import Foundation
 
+// --------------------------------------------------------------
+// MARK: - Default Implementations (Idiomatic Swift)
+// --------------------------------------------------------------
 
-//extension State where T == NFSA {
 extension Nondeterministic {
 
     /// Generates a new automaton instance based on the provided configuration options.
